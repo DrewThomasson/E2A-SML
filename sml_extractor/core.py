@@ -8,6 +8,78 @@ from collections import Counter
 from pathlib import Path
 
 
+def check_booknlp_installation() -> tuple[bool, str]:
+    """Check if BookNLP and its dependencies are properly installed.
+
+    Returns:
+        Tuple of (is_ok, message). If not ok, message describes what's missing.
+    """
+    errors = []
+
+    # Check booknlp package
+    try:
+        import booknlp  # noqa: F401
+    except ImportError:
+        errors.append(
+            "booknlp-plus is not installed. Install it with:\n"
+            "  pip install booknlp-plus"
+        )
+        return False, "\n".join(errors)
+
+    # Check key dependencies that commonly fail
+    dep_checks = [
+        ("torch", "torch", "pip install torch"),
+        ("transformers", "transformers", "pip install transformers>=4.30.0"),
+        ("spacy", "spacy", "pip install spacy>=3.5.0"),
+        ("sentence_transformers", "sentence-transformers", "pip install sentence-transformers"),
+        ("tf_keras", "tf-keras", "pip install tf-keras"),
+        ("numpy", "numpy", "pip install numpy>=1.24.0"),
+        ("pandas", "pandas", "pip install pandas>=1.3.0"),
+    ]
+
+    for module_name, pkg_name, install_cmd in dep_checks:
+        try:
+            __import__(module_name)
+        except ImportError:
+            errors.append(f"  - {pkg_name} is missing. Fix: {install_cmd}")
+
+    if errors:
+        return False, (
+            "BookNLP dependencies are missing:\n"
+            + "\n".join(errors)
+            + "\n\nOr install all at once:\n"
+            "  pip install booknlp-plus\n"
+            "  python -m spacy download en_core_web_sm"
+        )
+
+    # Check spacy model
+    try:
+        import spacy
+        spacy.load("en_core_web_sm")
+    except OSError:
+        errors.append(
+            "spaCy English model not found. Install it with:\n"
+            "  python -m spacy download en_core_web_sm"
+        )
+
+    if errors:
+        return False, "\n".join(errors)
+
+    # Try the actual BookNLP import that tends to fail
+    try:
+        from booknlp.booknlp import BookNLP  # noqa: F401
+    except Exception as e:
+        return False, (
+            f"BookNLP failed to initialize: {e}\n\n"
+            "This usually means a dependency version conflict.\n"
+            "Try reinstalling in a clean environment:\n"
+            "  pip install --force-reinstall booknlp-plus\n"
+            "  python -m spacy download en_core_web_sm"
+        )
+
+    return True, "BookNLP is ready."
+
+
 def convert_ebook_to_txt(input_file: str, output_dir: str) -> str:
     """Convert an ebook file to plain text using calibre's ebook-convert if needed.
 
@@ -57,7 +129,15 @@ def run_booknlp(
     Returns:
         Dict with keys: 'book_id', 'output_dir', 'characters', 'tokens_file',
                         'quotes_file', 'entities_file', 'book_file'
+
+    Raises:
+        RuntimeError: If BookNLP or its dependencies are not properly installed.
     """
+    # Pre-check installation before attempting import
+    ok, msg = check_booknlp_installation()
+    if not ok:
+        raise RuntimeError(f"BookNLP installation check failed:\n{msg}")
+
     from booknlp.booknlp import BookNLP
 
     os.makedirs(output_dir, exist_ok=True)

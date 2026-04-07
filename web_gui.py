@@ -10,6 +10,7 @@ from pathlib import Path
 import gradio as gr
 
 from sml_extractor.core import (
+    check_booknlp_installation,
     convert_ebook_to_txt,
     extract_characters,
     load_booknlp_output,
@@ -60,6 +61,12 @@ def process_book(
 
     # Run BookNLP
     booknlp_dir = os.path.join(work_dir, "booknlp")
+    progress(0.12, desc="Checking BookNLP installation...")
+
+    ok, msg = check_booknlp_installation()
+    if not ok:
+        raise gr.Error(f"BookNLP is not properly installed:\n{msg}")
+
     progress(0.15, desc=f"Running BookNLP ({model_size} model)... This may take a while.")
 
     try:
@@ -246,7 +253,6 @@ def create_app():
 
     with gr.Blocks(
         title="SML Book Dialog Extractor",
-        theme=gr.themes.Soft(),
     ) as app:
 
         gr.Markdown(
@@ -396,4 +402,4 @@ def create_app():
 
 if __name__ == "__main__":
     app = create_app()
-    app.launch(server_name="127.0.0.1", server_port=7860)
+    app.launch(server_name="127.0.0.1", server_port=7860, theme=gr.themes.Soft())

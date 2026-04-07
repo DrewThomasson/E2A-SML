@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from sml_extractor.core import (
+    check_booknlp_installation,
     convert_ebook_to_txt,
     extract_characters,
     load_booknlp_output,
@@ -123,6 +124,14 @@ def _run_headless(args):
     def progress(msg, pct=0):
         print(f"[{pct:3d}%] {msg}")
 
+    # Check BookNLP installation before starting
+    if not args.booknlp_dir:
+        ok, msg = check_booknlp_installation()
+        if not ok:
+            print(f"Error: {msg}")
+            sys.exit(1)
+        print("✓ BookNLP installation verified.\n")
+
     output_dir = os.path.abspath(args.output_dir)
     os.makedirs(output_dir, exist_ok=True)
 
@@ -231,6 +240,7 @@ def _run_headless(args):
 def _launch_gui(args):
     """Launch the web GUI."""
     try:
+        import gradio as gr
         from web_gui import create_app
 
         app = create_app()
@@ -238,6 +248,7 @@ def _launch_gui(args):
             server_name=args.host,
             server_port=args.port,
             share=args.share,
+            theme=gr.themes.Soft(),
         )
     except ImportError as e:
         print(f"Error: Could not launch GUI. Make sure gradio is installed: {e}")
