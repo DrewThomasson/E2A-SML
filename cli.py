@@ -134,7 +134,7 @@ def _run_headless(args):
             # Try to detect book_id from files in the directory
             for f in os.listdir(booknlp_dir):
                 if f.endswith(".tokens"):
-                    book_id = f.replace(".tokens", "")
+                    book_id = Path(f).stem
                     break
             if not book_id:
                 print("Error: Could not determine book_id. Use --book-id.")

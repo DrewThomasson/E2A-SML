@@ -28,6 +28,11 @@ from sml_extractor.voice_matcher import (
 _session_state = {}
 
 
+def _get_file_path(file_obj) -> str:
+    """Extract file path from a Gradio file object or string."""
+    return file_obj.name if hasattr(file_obj, "name") else str(file_obj)
+
+
 def process_book(
     input_file,
     model_size,
@@ -44,7 +49,7 @@ def process_book(
     work_dir = tempfile.mkdtemp(prefix="sml_extractor_")
     _session_state["work_dir"] = work_dir
 
-    input_path = input_file.name if hasattr(input_file, "name") else str(input_file)
+    input_path = _get_file_path(input_file)
 
     # Convert to txt if needed
     progress(0.1, desc="Converting to text...")
@@ -177,7 +182,7 @@ def upload_custom_voice(voice_file, char_name):
     voices_dir = os.path.join(work_dir, "custom_voices")
     os.makedirs(voices_dir, exist_ok=True)
 
-    voice_src = voice_file.name if hasattr(voice_file, "name") else str(voice_file)
+    voice_src = _get_file_path(voice_file)
     voice_dest = os.path.join(voices_dir, os.path.basename(voice_src))
     shutil.copy2(voice_src, voice_dest)
 

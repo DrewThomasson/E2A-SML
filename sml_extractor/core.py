@@ -217,7 +217,9 @@ def extract_characters(booknlp_data: dict) -> list:
     for char in char_data:
         gender = _infer_gender(char)
         age = _infer_age(char)
-        name = _normalize_name(char.get("names", {}).get("proper", ["Unknown"])[0] if char.get("names", {}).get("proper") else f"Character{char.get('id', 0)}")
+        proper_names = char.get("names", {}).get("proper", [])
+        raw_name = proper_names[0] if proper_names else f"Character{char.get('id', 0)}"
+        name = _normalize_name(raw_name)
 
         characters.append(
             {

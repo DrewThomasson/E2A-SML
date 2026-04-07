@@ -45,7 +45,7 @@ def generate_sml_output(
             sml_lines.append("")
             continue
 
-        # Parse [CharacterName] text [/] format
+        # Parse BookNLP tagged format: [CharacterName] sentence text [/]
         match = re.match(r"^\[([^\]]+)\]\s*(.*?)\s*\[/\]$", line)
         if match:
             char_name = match.group(1)
