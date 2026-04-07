@@ -34,6 +34,26 @@ def _get_file_path(file_obj) -> str:
     return file_obj.name if hasattr(file_obj, "name") else str(file_obj)
 
 
+def _get_all_voice_paths(voice_library: dict) -> list:
+    """Collect all voice file paths from the voice library into a flat list."""
+    paths = []
+    for age in voice_library:
+        for gender in voice_library.get(age, {}):
+            paths.extend(voice_library[age][gender])
+    return sorted(paths)
+
+
+def _voice_display_label(voice_path: str) -> str:
+    """Create a human-readable label from a voice path, e.g. 'AlexandraHisakawa (adult/female)'."""
+    info = get_voice_category_info(voice_path)
+    name = info["name"]
+    age = info["age"]
+    gender = info["gender"]
+    if age != "unknown" and gender != "unknown":
+        return f"{name} ({age}/{gender})"
+    return name
+
+
 def process_book(
     input_file,
     model_size,
@@ -97,7 +117,7 @@ def process_book(
     _session_state["voice_library"] = voice_library
     _session_state["e2a_path"] = e2a_path.strip() if e2a_path else ""
 
-    # Auto-assign voices
+    # Auto-assign voices based on each character's inferred gender and age
     voice_assignments = {}
     if voice_library:
         voice_assignments = auto_assign_voices(characters, voice_library)
@@ -108,8 +128,9 @@ def process_book(
     # Build character table for display
     char_table = _build_character_table(characters, voice_assignments)
 
-    # Build available voices list
-    voices_list = _build_voices_list(voice_library)
+    # Build available voices dropdown choices
+    char_names = [c.get("normalized_name", "Unknown") for c in characters]
+    voice_choices = _build_voice_choices(voice_library)
 
     # Get preview of book text
     book_txt = booknlp_data.get("book_txt", "")
@@ -117,20 +138,27 @@ def process_book(
 
     progress(1.0, desc="Done!")
 
+    num_voices = len(voice_assignments)
     status_msg = (
         f"✅ Processed successfully!\n"
         f"📚 Book ID: {book_id}\n"
         f"👥 Characters found: {len(characters)}\n"
-        f"🎤 Voices auto-assigned: {len(voice_assignments)}"
+        f"🎤 Voices auto-assigned: {num_voices}"
     )
 
+    # Update character dropdown choices
+    char_dropdown_update = gr.update(choices=char_names, value=char_names[0] if char_names else None)
+    voice_dropdown_update = gr.update(choices=voice_choices, value=None)
+
     return (
-        status_msg,
-        char_table,
-        preview,
-        gr.update(visible=True),  # Show character editor
-        gr.update(visible=True),  # Show generate button
-        voices_list,
+        status_msg,                         # status_output
+        char_table,                         # char_table
+        preview,                            # book_preview
+        gr.update(visible=True),            # char_voice_section
+        gr.update(visible=True),            # generate_btn
+        char_dropdown_update,               # char_selector
+        voice_dropdown_update,              # voice_selector
+        _format_char_detail(characters, voice_assignments, char_names[0] if char_names else None),
     )
 
 
@@ -142,48 +170,84 @@ def _build_character_table(characters, voice_assignments):
         gender = char.get("inferred_gender", "unknown")
         age = char.get("inferred_age_category", "unknown")
         voice = voice_assignments.get(name, "")
-        voice_display = get_voice_display_name(voice) if voice else "(none)"
-        rows.append([name, gender, age, voice_display, voice])
+        voice_display = _voice_display_label(voice) if voice else "(none)"
+        rows.append([name, gender, age, voice_display])
     return rows
 
 
-def _build_voices_list(voice_library):
-    """Build a formatted string of available voices."""
-    if not voice_library:
-        return "No voice library loaded. Provide ebook2audiobook path to auto-assign voices."
-
-    lines = ["Available voices from ebook2audiobook:\n"]
-    for age in ["adult", "teen", "child", "elder"]:
-        if age not in voice_library:
-            continue
-        for gender in ["female", "male"]:
-            voices = voice_library.get(age, {}).get(gender, [])
-            if voices:
-                lines.append(f"  {age}/{gender}: {len(voices)} voices")
-                for v in voices[:5]:
-                    lines.append(f"    - {get_voice_display_name(v)}")
-                if len(voices) > 5:
-                    lines.append(f"    ... and {len(voices) - 5} more")
-    return "\n".join(lines)
+def _build_voice_choices(voice_library):
+    """Build dropdown choices as (label, value) for available voices."""
+    choices = [("(none)", "")]
+    all_voices = _get_all_voice_paths(voice_library)
+    for v in all_voices:
+        choices.append((_voice_display_label(v), v))
+    return choices
 
 
-def update_voice_assignment(char_name, voice_path):
-    """Update a single character's voice assignment."""
+def _format_char_detail(characters, voice_assignments, selected_name):
+    """Format detail text for the currently selected character."""
+    if not selected_name:
+        return "No character selected."
+
+    for char in characters:
+        if char.get("normalized_name") == selected_name:
+            gender = char.get("inferred_gender", "unknown")
+            age = char.get("inferred_age_category", "unknown")
+            voice = voice_assignments.get(selected_name, "")
+            voice_label = _voice_display_label(voice) if voice else "(none)"
+            return (
+                f"**{selected_name}**\n"
+                f"  • Inferred gender: {gender}\n"
+                f"  • Inferred age category: {age}\n"
+                f"  • Assigned voice: {voice_label}"
+            )
+    return f"Character '{selected_name}' not found."
+
+
+def on_char_selected(char_name):
+    """Called when the user selects a character from the dropdown."""
+    characters = _session_state.get("characters", [])
+    voice_assignments = _session_state.get("voice_assignments", {})
+
+    detail = _format_char_detail(characters, voice_assignments, char_name)
+
+    # Pre-select the currently assigned voice in the voice dropdown
+    current_voice = voice_assignments.get(char_name, "")
+    return detail, gr.update(value=current_voice)
+
+
+def reassign_voice(char_name, voice_path):
+    """Reassign a voice to a character and refresh the table."""
+    if not char_name:
+        return "Please select a character first.", gr.update(), ""
+
     if "voice_assignments" not in _session_state:
         _session_state["voice_assignments"] = {}
 
     if voice_path and voice_path.strip():
         _session_state["voice_assignments"][char_name] = voice_path.strip()
-    elif char_name in _session_state["voice_assignments"]:
-        del _session_state["voice_assignments"][char_name]
+        voice_label = _voice_display_label(voice_path)
+    else:
+        _session_state["voice_assignments"].pop(char_name, None)
+        voice_label = "(none)"
 
-    return f"Updated: {char_name} → {voice_path if voice_path else '(none)'}"
+    characters = _session_state.get("characters", [])
+    voice_assignments = _session_state["voice_assignments"]
+
+    char_table = _build_character_table(characters, voice_assignments)
+    detail = _format_char_detail(characters, voice_assignments, char_name)
+
+    return (
+        char_table,
+        f"✅ {char_name} → {voice_label}",
+        detail,
+    )
 
 
 def upload_custom_voice(voice_file, char_name):
     """Handle uploading a custom voice file for a character."""
     if voice_file is None or not char_name:
-        return "Please select a character and upload a voice file."
+        return gr.update(), "Please select a character and upload a voice file.", ""
 
     work_dir = _session_state.get("work_dir", tempfile.mkdtemp(prefix="sml_extractor_"))
     voices_dir = os.path.join(work_dir, "custom_voices")
@@ -197,7 +261,17 @@ def upload_custom_voice(voice_file, char_name):
         _session_state["voice_assignments"] = {}
     _session_state["voice_assignments"][char_name] = voice_dest
 
-    return f"✅ Assigned {os.path.basename(voice_dest)} to {char_name}"
+    characters = _session_state.get("characters", [])
+    voice_assignments = _session_state["voice_assignments"]
+
+    char_table = _build_character_table(characters, voice_assignments)
+    detail = _format_char_detail(characters, voice_assignments, char_name)
+
+    return (
+        char_table,
+        f"✅ Assigned {os.path.basename(voice_dest)} to {char_name}",
+        detail,
+    )
 
 
 def generate_output(progress=gr.Progress()):
@@ -298,48 +372,49 @@ def create_app():
             status_output = gr.Textbox(label="Status", interactive=False)
 
         with gr.Tab("👥 Characters & Voices"):
-            voices_info = gr.Textbox(
-                label="📋 Available Voices",
-                interactive=False,
-                lines=8,
+            gr.Markdown(
+                "After analyzing a book, all detected characters are listed below with their "
+                "**inferred gender** and **age category** from BookNLP. Voices are auto-assigned "
+                "from the ebook2audiobook voice library. Select any character to change its voice."
             )
 
             char_table = gr.Dataframe(
-                headers=["Character", "Gender", "Age", "Voice", "Voice Path"],
-                datatype=["str", "str", "str", "str", "str"],
-                label="Characters",
+                headers=["Character", "Gender", "Age", "Assigned Voice"],
+                datatype=["str", "str", "str", "str"],
+                label="📋 Detected Characters",
                 interactive=False,
-                visible=False,
             )
 
-            with gr.Row(visible=False) as voice_editor:
-                with gr.Column():
-                    gr.Markdown("### Assign Custom Voice")
-                    char_name_input = gr.Textbox(
-                        label="Character Name",
-                        placeholder="Enter character name exactly as shown above",
-                    )
-                    voice_path_input = gr.Textbox(
-                        label="Voice File Path",
-                        placeholder="/path/to/voice.wav",
-                        info="Full path to a .wav voice file",
-                    )
-                    assign_btn = gr.Button("🎤 Assign Voice")
-                    assign_status = gr.Textbox(label="Assignment Status", interactive=False)
+            with gr.Group(visible=False) as char_voice_section:
+                gr.Markdown("### 🎤 Reassign Voice")
+                with gr.Row():
+                    with gr.Column(scale=1):
+                        char_selector = gr.Dropdown(
+                            label="Select Character",
+                            choices=[],
+                            interactive=True,
+                        )
+                        char_detail = gr.Markdown("Select a character to see details.")
 
-                with gr.Column():
-                    gr.Markdown("### Upload Voice File")
-                    upload_char_name = gr.Textbox(
-                        label="Character Name",
-                        placeholder="Enter character name",
-                    )
+                    with gr.Column(scale=1):
+                        voice_selector = gr.Dropdown(
+                            label="Select Voice",
+                            choices=[],
+                            interactive=True,
+                            info="Pick a voice from the ebook2audiobook library",
+                        )
+                        assign_btn = gr.Button("🎤 Assign Selected Voice", variant="primary")
+                        assign_status = gr.Textbox(label="Status", interactive=False)
+
+                gr.Markdown("### ⬆️ Or Upload a Custom Voice File")
+                with gr.Row():
                     voice_upload = gr.File(
-                        label="Upload Voice (.wav)",
+                        label="Upload Voice (.wav, .mp3, .flac, .ogg)",
                         file_types=[".wav", ".mp3", ".flac", ".ogg"],
                         type="filepath",
                     )
-                    upload_btn = gr.Button("⬆️ Upload & Assign")
-                    upload_status = gr.Textbox(label="Upload Status", interactive=False)
+                    upload_btn = gr.Button("⬆️ Upload & Assign to Selected Character")
+                upload_status = gr.Textbox(label="Upload Status", interactive=False)
 
         with gr.Tab("📝 Preview & Generate"):
             book_preview = gr.Textbox(
@@ -366,7 +441,9 @@ def create_app():
                 sml_download = gr.File(label="📥 Download SML Text", interactive=False)
                 json_download = gr.File(label="📥 Download Characters JSON", interactive=False)
 
-        # Wire up events
+        # --- Wire up events ---
+
+        # Process book → populate character table, dropdowns, and preview
         process_btn.click(
             fn=process_book,
             inputs=[input_file, model_size, e2a_path],
@@ -374,24 +451,36 @@ def create_app():
                 status_output,
                 char_table,
                 book_preview,
-                voice_editor,
+                char_voice_section,
                 generate_btn,
-                voices_info,
+                char_selector,
+                voice_selector,
+                char_detail,
             ],
         )
 
-        assign_btn.click(
-            fn=update_voice_assignment,
-            inputs=[char_name_input, voice_path_input],
-            outputs=[assign_status],
+        # Selecting a character → show details and current voice
+        char_selector.change(
+            fn=on_char_selected,
+            inputs=[char_selector],
+            outputs=[char_detail, voice_selector],
         )
 
+        # Assign voice from dropdown → update table and detail
+        assign_btn.click(
+            fn=reassign_voice,
+            inputs=[char_selector, voice_selector],
+            outputs=[char_table, assign_status, char_detail],
+        )
+
+        # Upload custom voice → assign to selected character, update table
         upload_btn.click(
             fn=upload_custom_voice,
-            inputs=[voice_upload, upload_char_name],
-            outputs=[upload_status],
+            inputs=[voice_upload, char_selector],
+            outputs=[char_table, upload_status, char_detail],
         )
 
+        # Generate SML output
         generate_btn.click(
             fn=generate_output,
             outputs=[gen_status, sml_preview, sml_download, json_download],
