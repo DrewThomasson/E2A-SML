@@ -68,7 +68,7 @@ def check_booknlp_installation() -> tuple[bool, str]:
     # Try the actual BookNLP import that tends to fail
     try:
         from booknlp.booknlp import BookNLP  # noqa: F401
-    except Exception as e:
+    except (ImportError, ModuleNotFoundError, AttributeError, OSError) as e:
         return False, (
             f"BookNLP failed to initialize: {e}\n\n"
             "This usually means a dependency version conflict.\n"
