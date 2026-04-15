@@ -43,6 +43,26 @@ def _get_all_voice_paths(voice_library: dict) -> list:
     return sorted(paths)
 
 
+def _resolve_voice_path(voice_path: str) -> str | None:
+    """Resolve a relative voice path to an absolute file path for playback.
+
+    Voice paths are stored as relative (e.g. ``voices/eng/adult/male/Name.wav``)
+    and need to be joined with the ebook2audiobook root to get a playable file.
+    """
+    if not voice_path:
+        return None
+    # Already absolute
+    if os.path.isabs(voice_path) and os.path.isfile(voice_path):
+        return voice_path
+    # Resolve relative against e2a_path
+    e2a_path = _session_state.get("e2a_path", "")
+    if e2a_path:
+        full_path = os.path.join(e2a_path, voice_path)
+        if os.path.isfile(full_path):
+            return full_path
+    return None
+
+
 def _voice_display_label(voice_path: str) -> str:
     """Create a human-readable label from a voice path, e.g. 'AlexandraHisakawa (adult/female)'."""
     info = get_voice_category_info(voice_path)
@@ -230,13 +250,14 @@ def on_char_selected(char_name):
 
     # Pre-select the currently assigned voice in the voice dropdown
     current_voice = voice_assignments.get(char_name, "")
-    return detail, gr.update(value=current_voice)
+    audio_path = _resolve_voice_path(current_voice)
+    return detail, gr.update(value=current_voice), audio_path
 
 
 def reassign_voice(char_name, voice_path):
     """Reassign a voice to a character and refresh the table."""
     if not char_name:
-        return "Please select a character first.", gr.update(), ""
+        return "Please select a character first.", gr.update(), "", None
 
     if "voice_assignments" not in _session_state:
         _session_state["voice_assignments"] = {}
@@ -253,18 +274,20 @@ def reassign_voice(char_name, voice_path):
 
     char_table = _build_character_table(characters, voice_assignments)
     detail = _format_char_detail(characters, voice_assignments, char_name)
+    audio_path = _resolve_voice_path(voice_path) if voice_path else None
 
     return (
         char_table,
         f"✅ {char_name} → {voice_label}",
         detail,
+        audio_path,
     )
 
 
 def upload_custom_voice(voice_file, char_name):
     """Handle uploading a custom voice file for a character."""
     if voice_file is None or not char_name:
-        return gr.update(), "Please select a character and upload a voice file.", ""
+        return gr.update(), "Please select a character and upload a voice file.", "", None
 
     work_dir = _session_state.get("work_dir", tempfile.mkdtemp(prefix="sml_extractor_"))
     voices_dir = os.path.join(work_dir, "custom_voices")
@@ -288,7 +311,15 @@ def upload_custom_voice(voice_file, char_name):
         char_table,
         f"✅ Assigned {os.path.basename(voice_dest)} to {char_name}",
         detail,
+        voice_dest,
     )
+
+
+def preview_dropdown_voice(voice_path):
+    """Preview the voice currently selected in the dropdown (before assigning)."""
+    if not voice_path or not voice_path.strip():
+        return None
+    return _resolve_voice_path(voice_path)
 
 
 def generate_output(progress=gr.Progress()):
@@ -429,6 +460,17 @@ def create_app(default_e2a_path: str = ""):
                         assign_btn = gr.Button("🎤 Assign Selected Voice", variant="primary")
                         assign_status = gr.Textbox(label="Status", interactive=False)
 
+                gr.Markdown("### 🔊 Voice Preview")
+                with gr.Row():
+                    with gr.Column(scale=1):
+                        preview_btn = gr.Button("🔊 Preview Selected Voice", variant="secondary")
+                    with gr.Column(scale=2):
+                        voice_preview = gr.Audio(
+                            label="Voice Preview",
+                            type="filepath",
+                            interactive=False,
+                        )
+
                 gr.Markdown("### ⬆️ Or Upload a Custom Voice File")
                 with gr.Row():
                     voice_upload = gr.File(
@@ -482,25 +524,32 @@ def create_app(default_e2a_path: str = ""):
             ],
         )
 
-        # Selecting a character → show details and current voice
+        # Selecting a character → show details, current voice, and audio preview
         char_selector.change(
             fn=on_char_selected,
             inputs=[char_selector],
-            outputs=[char_detail, voice_selector],
+            outputs=[char_detail, voice_selector, voice_preview],
         )
 
-        # Assign voice from dropdown → update table and detail
+        # Assign voice from dropdown → update table, detail, and audio preview
         assign_btn.click(
             fn=reassign_voice,
             inputs=[char_selector, voice_selector],
-            outputs=[char_table, assign_status, char_detail],
+            outputs=[char_table, assign_status, char_detail, voice_preview],
         )
 
-        # Upload custom voice → assign to selected character, update table
+        # Preview the voice in the dropdown (without assigning)
+        preview_btn.click(
+            fn=preview_dropdown_voice,
+            inputs=[voice_selector],
+            outputs=[voice_preview],
+        )
+
+        # Upload custom voice → assign to selected character, update table and preview
         upload_btn.click(
             fn=upload_custom_voice,
             inputs=[voice_upload, char_selector],
-            outputs=[char_table, upload_status, char_detail],
+            outputs=[char_table, upload_status, char_detail, voice_preview],
         )
 
         # Generate SML output
