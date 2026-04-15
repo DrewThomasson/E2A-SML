@@ -303,17 +303,18 @@ def generate_output(progress=gr.Progress()):
     work_dir = _session_state.get("work_dir", tempfile.mkdtemp(prefix="sml_extractor_"))
 
     book_txt = booknlp_data.get("book_txt", "")
-    if not book_txt:
-        raise gr.Error("No book text data found. BookNLP may not have generated book.txt.")
+    has_tokens = bool(booknlp_data.get("tokens"))
+    if not book_txt and not has_tokens:
+        raise gr.Error("No book text data found. BookNLP may not have generated output files.")
 
     progress(0.3, desc="Generating SML output...")
 
     output_dir = os.path.join(work_dir, "sml_output")
     os.makedirs(output_dir, exist_ok=True)
 
-    # Generate SML text
+    # Generate SML text (uses token-level data when available)
     sml_path = os.path.join(output_dir, f"{book_id}.sml.txt")
-    generate_sml_output(book_txt, characters, sml_path, voice_assignments)
+    generate_sml_output(booknlp_data, characters, sml_path, voice_assignments)
 
     progress(0.6, desc="Generating characters JSON...")
 

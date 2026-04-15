@@ -226,13 +226,13 @@ def _run_headless(args):
     print()
 
     # Step 5: Generate SML output
-    if "book_txt" not in booknlp_data:
-        print("Error: No book.txt found in BookNLP output. Cannot generate SML.")
+    if not booknlp_data.get("tokens") and "book_txt" not in booknlp_data:
+        print("Error: No token data or book.txt found in BookNLP output. Cannot generate SML.")
         sys.exit(1)
 
     sml_output_path = os.path.join(output_dir, f"{book_id}.sml.txt")
     generate_sml_output(
-        booknlp_data["book_txt"], characters, sml_output_path, voice_assignments
+        booknlp_data, characters, sml_output_path, voice_assignments
     )
     progress(f"SML output written to: {sml_output_path}", 90)
 
