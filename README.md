@@ -21,8 +21,8 @@ The easiest way to run the tool — all dependencies (BookNLP, spaCy, Calibre, G
 
 ```bash
 # 1. Clone this repo
-git clone https://github.com/DrewThomasson/sml-book-dialog-extractor.git
-cd sml-book-dialog-extractor
+git clone https://github.com/DrewThomasson/E2A-SML.git
+cd E2A-SML
 
 # 2. Edit docker-compose.yml to point to your local ebook2audiobook folder
 #    (default: ~/ebook2audiobook)
@@ -53,8 +53,8 @@ docker run -v ~/ebook2audiobook:/ebook2audiobook -v ./output:/app/output \
 ### Installation
 
 ```bash
-git clone https://github.com/DrewThomasson/sml-book-dialog-extractor.git
-cd sml-book-dialog-extractor
+git clone https://github.com/DrewThomasson/E2A-SML.git
+cd E2A-SML
 pip install -r requirements.txt
 python -m spacy download en_core_web_sm
 ```
