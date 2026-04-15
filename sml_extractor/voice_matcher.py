@@ -51,7 +51,7 @@ def scan_voice_library(ebook2audiobook_path: str, language: str = "eng") -> dict
             voices = []
             for f in sorted(os.listdir(gender_dir)):
                 if Path(f).suffix.lower() in VOICE_EXTENSIONS:
-                    voices.append(os.path.join(gender_dir, f))
+                    voices.append(os.path.join("voices", language, age_cat, gender, f))
             library[age_cat][gender] = voices
 
     return library
