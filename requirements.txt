@@ -1,0 +1,11 @@
+# BookNLP dependencies
+booknlp-plus
+spacy>=3.5.0
+
+# Web GUI
+gradio>=4.0.0
+
+# Core dependencies (most come with booknlp-plus)
+torch>=2.0.0
+transformers>=4.30.0
+numpy>=1.24.0
