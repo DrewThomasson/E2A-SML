@@ -251,7 +251,7 @@ def _run_headless(args):
         print(f"  Use the SML file with ebook2audiobook for multi-speaker audiobook generation.")
     else:
         print(f"\n  No voices were matched from {args.e2a_path}.")
-        print(f"  Check that voices/eng/ contains voice files.")
+        print(f"  Check that voices/{args.language}/ contains voice files.")
 
 
 def _launch_gui(args):
