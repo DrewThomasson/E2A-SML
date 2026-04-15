@@ -30,16 +30,16 @@ def main():
         epilog="""
 Examples:
   # Basic usage - process a book and generate SML output
-  python cli.py input_book.txt -o output/
+  python cli.py input_book.txt --e2a-path /path/to/ebook2audiobook
 
-  # Use with ebook2audiobook voice library for auto voice assignment
-  python cli.py input_book.txt -o output/ --e2a-path /path/to/ebook2audiobook
+  # With custom output directory
+  python cli.py input_book.txt --e2a-path ~/ebook2audiobook -o output/
 
   # Process an epub file (requires Calibre)
-  python cli.py mybook.epub -o output/
+  python cli.py mybook.epub --e2a-path ~/ebook2audiobook
 
   # Use pre-existing BookNLP output
-  python cli.py --booknlp-dir existing_output/ --book-id mybook -o sml_output/
+  python cli.py --booknlp-dir existing_output/ --book-id mybook --e2a-path ~/ebook2audiobook -o sml_output/
 
   # Launch web GUI instead
   python cli.py --gui
@@ -65,7 +65,8 @@ Examples:
     )
     parser.add_argument(
         "--e2a-path",
-        help="Path to ebook2audiobook repository for voice auto-assignment",
+        help="Path to ebook2audiobook repository (required for voice assignment). "
+        "Supports ~ for home directory, e.g. ~/ebook2audiobook",
     )
     parser.add_argument(
         "--voices-dir",
@@ -108,12 +109,37 @@ Examples:
 
     args = parser.parse_args()
 
+    # Expand ~ in all path arguments
+    if args.e2a_path:
+        args.e2a_path = os.path.expanduser(args.e2a_path)
+    if args.output_dir:
+        args.output_dir = os.path.expanduser(args.output_dir)
+    if args.voices_dir:
+        args.voices_dir = os.path.expanduser(args.voices_dir)
+    if args.booknlp_dir:
+        args.booknlp_dir = os.path.expanduser(args.booknlp_dir)
+    if args.input_file:
+        args.input_file = os.path.expanduser(args.input_file)
+
     if args.gui:
         _launch_gui(args)
         return
 
     if not args.input_file and not args.booknlp_dir:
         parser.error("Either input_file or --booknlp-dir is required (or use --gui)")
+
+    if not args.e2a_path:
+        parser.error("--e2a-path is required. Provide the path to your ebook2audiobook folder.")
+
+    if not os.path.isdir(args.e2a_path):
+        parser.error(f"ebook2audiobook path not found: {args.e2a_path}")
+
+    voices_dir = os.path.join(args.e2a_path, "voices")
+    if not os.path.isdir(voices_dir):
+        parser.error(
+            f"No 'voices/' directory found in {args.e2a_path}. "
+            "Make sure this is the ebook2audiobook repository root."
+        )
 
     _run_headless(args)
 
@@ -182,31 +208,22 @@ def _run_headless(args):
         print(f"  {i + 1}. {name} (gender: {gender}, age: {age})")
     print()
 
-    # Step 4: Auto-assign voices if ebook2audiobook path provided
+    # Step 4: Auto-assign voices from ebook2audiobook voice library
     voice_assignments = {}
-    if args.e2a_path:
-        progress("Scanning ebook2audiobook voice library...", 75)
-        voice_library = scan_voice_library(args.e2a_path, args.language)
-        custom_voices = (
-            scan_custom_voices(args.voices_dir) if args.voices_dir else None
-        )
-        voice_assignments = auto_assign_voices(
-            characters, voice_library, custom_voices
-        )
-        progress(f"Auto-assigned {len(voice_assignments)} voices.", 80)
+    progress("Scanning ebook2audiobook voice library...", 75)
+    voice_library = scan_voice_library(args.e2a_path, args.language)
+    custom_voices = (
+        scan_custom_voices(args.voices_dir) if args.voices_dir else None
+    )
+    voice_assignments = auto_assign_voices(
+        characters, voice_library, custom_voices
+    )
+    progress(f"Auto-assigned {len(voice_assignments)} voices.", 80)
 
-        print("--- Voice Assignments ---")
-        for name, voice in voice_assignments.items():
-            print(f"  {name} -> {get_voice_display_name(voice)}")
-        print()
-    elif args.voices_dir:
-        progress("Scanning custom voice directory...", 75)
-        custom_voices = scan_custom_voices(args.voices_dir)
-        voice_library = {}
-        voice_assignments = auto_assign_voices(
-            characters, voice_library, custom_voices
-        )
-        progress(f"Assigned {len(voice_assignments)} voices.", 80)
+    print("--- Voice Assignments ---")
+    for name, voice in voice_assignments.items():
+        print(f"  {name} -> {get_voice_display_name(voice)}")
+    print()
 
     # Step 5: Generate SML output
     if "book_txt" not in booknlp_data:
@@ -233,8 +250,8 @@ def _run_headless(args):
         print(f"\n  Voice assignments are embedded in the SML output.")
         print(f"  Use the SML file with ebook2audiobook for multi-speaker audiobook generation.")
     else:
-        print(f"\n  No voices assigned. Use --e2a-path or --voices-dir to auto-assign voices,")
-        print(f"  or use --gui mode to manually assign voices.")
+        print(f"\n  No voices were matched from {args.e2a_path}.")
+        print(f"  Check that voices/eng/ contains voice files.")
 
 
 def _launch_gui(args):

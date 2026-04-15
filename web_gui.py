@@ -64,6 +64,25 @@ def process_book(
     if input_file is None:
         raise gr.Error("Please upload a book file.")
 
+    # Validate ebook2audiobook path
+    if not e2a_path or not e2a_path.strip():
+        raise gr.Error(
+            "Please provide the path to your ebook2audiobook folder.\n"
+            "This is required for voice auto-assignment."
+        )
+
+    e2a_path = os.path.expanduser(e2a_path.strip())
+
+    if not os.path.isdir(e2a_path):
+        raise gr.Error(f"ebook2audiobook folder not found: {e2a_path}")
+
+    voices_dir = os.path.join(e2a_path, "voices")
+    if not os.path.isdir(voices_dir):
+        raise gr.Error(
+            f"No 'voices/' directory found in {e2a_path}.\n"
+            "Make sure this is the ebook2audiobook repository root."
+        )
+
     progress(0.05, desc="Preparing...")
 
     # Create temp working directory
@@ -110,12 +129,10 @@ def process_book(
 
     progress(0.7, desc="Scanning voice library...")
 
-    # Scan voice library if path provided
-    voice_library = {}
-    if e2a_path and e2a_path.strip() and os.path.isdir(e2a_path.strip()):
-        voice_library = scan_voice_library(e2a_path.strip())
+    # Scan voice library from ebook2audiobook
+    voice_library = scan_voice_library(e2a_path)
     _session_state["voice_library"] = voice_library
-    _session_state["e2a_path"] = e2a_path.strip() if e2a_path else ""
+    _session_state["e2a_path"] = e2a_path
 
     # Auto-assign voices based on each character's inferred gender and age
     voice_assignments = {}
@@ -363,9 +380,9 @@ def create_app():
                         info="'big' is more accurate but slower and requires more RAM/GPU",
                     )
                     e2a_path = gr.Textbox(
-                        label="📂 ebook2audiobook Path (optional)",
+                        label="📂 ebook2audiobook Path (required)",
                         placeholder="/path/to/ebook2audiobook",
-                        info="Path to local ebook2audiobook repo for voice auto-assignment",
+                        info="Full path to your local ebook2audiobook folder (supports ~/)",
                     )
 
             process_btn = gr.Button("🔍 Analyze Book", variant="primary", size="lg")
