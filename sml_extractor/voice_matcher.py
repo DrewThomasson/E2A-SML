@@ -85,6 +85,11 @@ def auto_assign_voices(
 ) -> dict:
     """Automatically assign voices to characters based on gender and age.
 
+    Characters with known genders (male/female) are assigned first so they
+    get matching voices.  Characters with unknown gender are assigned
+    afterward, alternating between male and female pools to avoid exhausting
+    one gender's voice supply.
+
     Args:
         characters: List of character dicts with inferred_gender and inferred_age_category.
         voice_library: Voice library from scan_voice_library().
@@ -96,10 +101,35 @@ def auto_assign_voices(
     assignments = {}
     used_voices = set()
 
+    # Split into known-gender vs unknown-gender characters, preserving order
+    known_gender_chars = []
+    unknown_gender_chars = []
     for char in characters:
+        gender = char.get("inferred_gender", "unknown")
+        if gender in GENDERS:
+            known_gender_chars.append(char)
+        else:
+            unknown_gender_chars.append(char)
+
+    # Assign known-gender characters first so they always get matching voices
+    for char in known_gender_chars:
         name = char.get("normalized_name", "")
         gender = char.get("inferred_gender", "unknown")
         age = char.get("inferred_age_category", "adult")
+
+        voice = _find_best_voice(
+            gender, age, voice_library, used_voices, custom_voices
+        )
+        if voice:
+            assignments[name] = voice
+            used_voices.add(voice)
+
+    # Assign unknown-gender characters, alternating male/female
+    _alternate_gender = ["female", "male"]
+    for i, char in enumerate(unknown_gender_chars):
+        name = char.get("normalized_name", "")
+        age = char.get("inferred_age_category", "adult")
+        gender = _alternate_gender[i % 2]
 
         voice = _find_best_voice(
             gender, age, voice_library, used_voices, custom_voices
