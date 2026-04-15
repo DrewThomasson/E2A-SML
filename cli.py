@@ -260,7 +260,7 @@ def _launch_gui(args):
         import gradio as gr
         from web_gui import create_app
 
-        app = create_app()
+        app = create_app(default_e2a_path=args.e2a_path or "")
         app.launch(
             server_name=args.host,
             server_port=args.port,

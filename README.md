@@ -10,9 +10,45 @@ Uses [BookNLP](https://github.com/DrewThomasson/booknlp) to analyze books, extra
 - **Voice auto-assignment** — matches characters to appropriate voices from the ebook2audiobook voice library based on gender and age
 - **Web GUI** — Gradio-based web interface for easy voice assignment and preview
 - **Headless CLI** — full command-line interface for batch/automated processing
+- **Docker support** — fully containerized with all dependencies pre-installed
 - **Multiple formats** — supports .txt, .epub, .mobi, .pdf, .html, .fb2, .azw, .azw3 (non-txt requires [Calibre](https://calibre-ebook.com/download))
 
-## 🚀 Quick Start
+## 🐳 Docker (Recommended)
+
+The easiest way to run the tool — all dependencies (BookNLP, spaCy, Calibre, Gradio) are pre-installed.
+
+### Quick Start with Docker Compose
+
+```bash
+# 1. Clone this repo
+git clone https://github.com/DrewThomasson/sml-book-dialog-extractor.git
+cd sml-book-dialog-extractor
+
+# 2. Edit docker-compose.yml to point to your local ebook2audiobook folder
+#    (default: ~/ebook2audiobook)
+
+# 3. Build and run
+docker compose up --build
+```
+
+Open http://localhost:7860 in your browser. The ebook2audiobook path is pre-filled as `/ebook2audiobook`.
+
+### Docker CLI
+
+```bash
+# Build the image
+docker build -t sml-extractor .
+
+# Run the web GUI (mount your ebook2audiobook folder)
+docker run -p 7860:7860 -v ~/ebook2audiobook:/ebook2audiobook sml-extractor
+
+# Run headless mode
+docker run -v ~/ebook2audiobook:/ebook2audiobook -v ./output:/app/output \
+  -v ./mybook.txt:/app/mybook.txt \
+  sml-extractor python cli.py /app/mybook.txt --e2a-path /ebook2audiobook -o /app/output
+```
+
+## 🚀 Local Installation
 
 ### Installation
 
@@ -26,7 +62,7 @@ python -m spacy download en_core_web_sm
 ### Web GUI
 
 ```bash
-python cli.py --gui
+python cli.py --gui --e2a-path /path/to/ebook2audiobook
 ```
 
 Opens a browser-based interface where you can:
@@ -39,19 +75,19 @@ Opens a browser-based interface where you can:
 
 ```bash
 # Basic - analyze a book and generate SML output
-python cli.py mybook.txt -o output/
+python cli.py mybook.txt --e2a-path /path/to/ebook2audiobook
 
-# With voice auto-assignment from ebook2audiobook
-python cli.py mybook.txt -o output/ --e2a-path /path/to/ebook2audiobook
+# With custom output directory
+python cli.py mybook.txt --e2a-path ~/ebook2audiobook -o output/
 
 # Process an epub (requires Calibre)
-python cli.py mybook.epub -o output/
+python cli.py mybook.epub --e2a-path ~/ebook2audiobook
 
 # Use the more accurate (but slower) BookNLP model
-python cli.py mybook.txt -o output/ --model big
+python cli.py mybook.txt --e2a-path ~/ebook2audiobook --model big
 
 # Use pre-existing BookNLP output
-python cli.py --booknlp-dir existing_output/ --book-id mybook -o sml_output/
+python cli.py --booknlp-dir existing_output/ --book-id mybook --e2a-path ~/ebook2audiobook -o sml_output/
 ```
 
 ## 📖 How It Works
@@ -172,10 +208,15 @@ Options:
 
 ## 🔧 Requirements
 
+### Docker (recommended)
+- [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/)
+- [ebook2audiobook](https://github.com/DrewThomasson/ebook2audiobook) cloned locally (for the voice library)
+
+### Local installation
 - Python 3.10+
 - [BookNLP-plus](https://github.com/DrewThomasson/booknlp) (installed via requirements.txt)
 - [Calibre](https://calibre-ebook.com/download) (optional, for non-txt ebook formats)
-- [ebook2audiobook](https://github.com/DrewThomasson/ebook2audiobook) (optional, for voice library)
+- [ebook2audiobook](https://github.com/DrewThomasson/ebook2audiobook) (required, for voice library)
 
 ## 📄 License
 

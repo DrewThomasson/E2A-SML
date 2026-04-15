@@ -339,8 +339,12 @@ def generate_output(progress=gr.Progress()):
     )
 
 
-def create_app():
-    """Create the Gradio web application."""
+def create_app(default_e2a_path: str = ""):
+    """Create the Gradio web application.
+
+    Args:
+        default_e2a_path: Default value for the ebook2audiobook path field.
+    """
 
     with gr.Blocks(
         title="SML Book Dialog Extractor",
@@ -382,6 +386,7 @@ def create_app():
                     e2a_path = gr.Textbox(
                         label="📂 ebook2audiobook Path (required)",
                         placeholder="/path/to/ebook2audiobook",
+                        value=default_e2a_path,
                         info="Full path to your local ebook2audiobook folder (supports ~/)",
                     )
 
