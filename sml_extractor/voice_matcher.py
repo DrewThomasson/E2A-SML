@@ -125,11 +125,11 @@ def auto_assign_voices(
             used_voices.add(voice)
 
     # Assign unknown-gender characters, alternating male/female
-    _alternate_gender = ["female", "male"]
+    alternate_genders = ["female", "male"]
     for i, char in enumerate(unknown_gender_chars):
         name = char.get("normalized_name", "")
         age = char.get("inferred_age_category", "adult")
-        gender = _alternate_gender[i % 2]
+        gender = alternate_genders[i % 2]
 
         voice = _find_best_voice(
             gender, age, voice_library, used_voices, custom_voices
