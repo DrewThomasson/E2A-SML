@@ -8,10 +8,12 @@ import sys
 from pathlib import Path
 
 from sml_extractor.core import (
+    LANGUAGE_CONFIGS,
     check_booknlp_installation,
     convert_ebook_to_txt,
     extract_characters,
     load_booknlp_output,
+    normalize_language_code,
     run_booknlp,
 )
 from sml_extractor.sml_generator import generate_characters_json, generate_sml_output
@@ -74,8 +76,13 @@ Examples:
     )
     parser.add_argument(
         "--language",
-        default="eng",
-        help="Language code for voice selection (default: eng)",
+        default="en",
+        choices=["en", "eng", "fr", "fra"],
+        help=(
+            "Language of the book: 'en'/'eng' for English (default), "
+            "'fr'/'fra' for French. Controls both the BookNLP model and "
+            "the voice-library sub-directory used for voice assignment."
+        ),
     )
     parser.add_argument(
         "--booknlp-dir",
@@ -150,13 +157,17 @@ def _run_headless(args):
     def progress(msg, pct=0):
         print(f"[{pct:3d}%] {msg}")
 
+    lang = normalize_language_code(args.language)
+    lang_cfg = LANGUAGE_CONFIGS[lang]
+    voice_lang = lang_cfg["voice_lang"]
+
     # Check BookNLP installation before starting
     if not args.booknlp_dir:
-        ok, msg = check_booknlp_installation()
+        ok, msg = check_booknlp_installation(lang)
         if not ok:
             print(f"Error: {msg}")
             sys.exit(1)
-        print("✓ BookNLP installation verified.\n")
+        print(f"✓ BookNLP installation verified ({lang_cfg['display_name']}).\n")
 
     output_dir = os.path.abspath(args.output_dir)
     os.makedirs(output_dir, exist_ok=True)
@@ -188,7 +199,7 @@ def _run_headless(args):
         progress(f"Text file: {txt_file}", 5)
 
         booknlp_dir = os.path.join(output_dir, "booknlp")
-        result = run_booknlp(txt_file, booknlp_dir, args.model, progress)
+        result = run_booknlp(txt_file, booknlp_dir, args.model, lang, progress)
         book_id = result["book_id"]
 
     # Step 2: Load BookNLP data
@@ -196,7 +207,7 @@ def _run_headless(args):
     progress("BookNLP data loaded.", 65)
 
     # Step 3: Extract characters
-    characters = extract_characters(booknlp_data)
+    characters = extract_characters(booknlp_data, lang)
     progress(f"Found {len(characters)} characters.", 70)
 
     # Print character summary
@@ -211,7 +222,7 @@ def _run_headless(args):
     # Step 4: Auto-assign voices from ebook2audiobook voice library
     voice_assignments = {}
     progress("Scanning ebook2audiobook voice library...", 75)
-    voice_library = scan_voice_library(args.e2a_path, args.language)
+    voice_library = scan_voice_library(args.e2a_path, voice_lang)
     custom_voices = (
         scan_custom_voices(args.voices_dir) if args.voices_dir else None
     )
@@ -251,7 +262,7 @@ def _run_headless(args):
         print(f"  Use the SML file with ebook2audiobook for multi-speaker audiobook generation.")
     else:
         print(f"\n  No voices were matched from {args.e2a_path}.")
-        print(f"  Check that voices/{args.language}/ contains voice files.")
+        print(f"  Check that voices/{voice_lang}/ contains voice files.")
 
 
 def _launch_gui(args):
