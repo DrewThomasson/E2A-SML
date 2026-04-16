@@ -56,7 +56,11 @@ def normalize_language_code(lang: str) -> str:
 
 
 def check_booknlp_installation(language: str = "en") -> tuple[bool, str]:
-    """Check if BookNLP and its dependencies are properly installed.
+    """Check if the NLP backend and its dependencies are properly installed.
+
+    For French, the built-in ``FrenchBookNLP`` (spaCy-based) is used and only
+    the ``fr_core_news_sm`` spaCy model is required.  For English,
+    ``booknlp-plus`` and its dependencies are checked as before.
 
     Args:
         language: Language to check ('en' or 'fr').  The appropriate spaCy
@@ -71,7 +75,19 @@ def check_booknlp_installation(language: str = "en") -> tuple[bool, str]:
 
     errors = []
 
-    # Check booknlp package
+    # French uses the built-in FrenchBookNLP — only spaCy is needed.
+    if lang == "fr":
+        try:
+            import spacy
+            spacy.load(spacy_model)
+        except OSError:
+            errors.append(
+                f"spaCy French model not found. Install it with:\n"
+                f"  python -m spacy download {spacy_model}"
+            )
+        return (False, "\n".join(errors)) if errors else (True, "French NLP (spaCy) is ready.")
+
+    # --- English: check booknlp-plus and all its dependencies ---
     try:
         import booknlp  # noqa: F401
     except ImportError:
@@ -200,25 +216,37 @@ def run_booknlp(
     if not ok:
         raise RuntimeError(f"BookNLP installation check failed:\n{msg}")
 
-    from booknlp.booknlp import BookNLP
-
     os.makedirs(output_dir, exist_ok=True)
     book_id = Path(input_file).stem
 
     if progress_callback:
-        progress_callback("Initializing BookNLP...", 5)
+        progress_callback("Initializing NLP pipeline...", 5)
 
-    model_params = {
-        "pipeline": lang_cfg["pipeline"],
-        "model": model,
-    }
+    if lang == "fr":
+        # Use the built-in spaCy-based French pipeline (no trained model files
+        # needed beyond fr_core_news_sm which is already in the Docker image).
+        from sml_extractor.french_booknlp import FrenchBookNLP
 
-    booknlp = BookNLP(lang_cfg["booknlp_lang"], model_params)
+        model_params = {"spacy_model": lang_cfg["spacy_model"]}
+        nlp = FrenchBookNLP(model_params)
+        if progress_callback:
+            progress_callback(
+                f"Processing book with French NLP pipeline ({lang_cfg['display_name']})...", 10
+            )
+    else:
+        from booknlp.booknlp import BookNLP
 
-    if progress_callback:
-        progress_callback(f"Processing book with BookNLP ({model} model, {lang_cfg['display_name']})...", 10)
+        model_params = {
+            "pipeline": lang_cfg["pipeline"],
+            "model": model,
+        }
+        nlp = BookNLP(lang_cfg["booknlp_lang"], model_params)
+        if progress_callback:
+            progress_callback(
+                f"Processing book with BookNLP ({model} model, {lang_cfg['display_name']})...", 10
+            )
 
-    booknlp.process(input_file, output_dir, book_id)
+    nlp.process(input_file, output_dir, book_id)
 
     if progress_callback:
         progress_callback("BookNLP processing complete.", 60)
