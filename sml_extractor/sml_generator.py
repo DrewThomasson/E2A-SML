@@ -247,7 +247,7 @@ def _normalize_name(name: str) -> str:
 
 
 def _join_tokens(words: list) -> str:
-    """Join tokens into readable text with proper punctuation and contraction spacing."""
+    """Join tokens into readable text with proper punctuation, contraction, and dialect spacing."""
     if not words:
         return ""
 
@@ -259,13 +259,14 @@ def _join_tokens(words: list) -> str:
     # 2. Fix standard contractions with both straight and curly apostrophes
     text = re.sub(r"\b(\w+)\s+(['’](?:s|re|ve|ll|d|m|t))\b", r"\1\2", text, flags=re.IGNORECASE)
 
-    # 3. Fix dropped 'g' dialect (e.g., "swarmin ’", "flyin ’" -> "swarmin'", "flyin'")
-    # Looks for words ending in "in" followed by a space and an apostrophe
+    # 3. Fix dropped 'g' dialect (e.g., "swarmin ’" -> "swarmin'")
     text = re.sub(r"\b(\w+in)\s+(['’])(?!\w)", r"\1\2", text, flags=re.IGNORECASE)
 
-    # 4. Fix spacing around punctuation
-    text = re.sub(r"\s+([,.!?;:\"')\]}])", r"\1", text)
-    text = re.sub(r"([(\[{])\s+", r"\1", text)
+    # 4. Fix spacing around punctuation (UPDATED FOR CURLY QUOTES)
+    # Removes space BEFORE closing punctuation, including curly closing quotes/apostrophes
+    text = re.sub(r"\s+([,.!?;:\"')\]}’”])", r"\1", text)
+    # Removes space AFTER opening punctuation, including curly opening quotes
+    text = re.sub(r"([(\[{“‘])\s+", r"\1", text)
 
     # 5. Fix double spaces and cleanup
     text = re.sub(r"\s{2,}", " ", text)
