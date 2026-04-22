@@ -247,20 +247,27 @@ def _normalize_name(name: str) -> str:
 
 
 def _join_tokens(words: list) -> str:
-    """Join tokens into readable text with proper punctuation spacing."""
+    """Join tokens into readable text with proper punctuation and contraction spacing."""
     if not words:
         return ""
 
     text = " ".join(words)
 
-    # Fix spacing around punctuation
-    text = re.sub(r'\s+([,.!?;:"\'\)\]\}])', r"\1", text)
-    text = re.sub(r'([\(\[\{])\s+', r"\1", text)
+    # 1. Fix "n't" contractions with both straight and curly apostrophes
+    text = re.sub(r"\b(\w+)\s+(n['’]t)\b", r"\1\2", text, flags=re.IGNORECASE)
 
-    # Fix contractions
-    text = re.sub(r"(\w)\s+'\s*(\w)", r"\1'\2", text)
+    # 2. Fix standard contractions with both straight and curly apostrophes
+    text = re.sub(r"\b(\w+)\s+(['’](?:s|re|ve|ll|d|m|t))\b", r"\1\2", text, flags=re.IGNORECASE)
 
-    # Fix double spaces
+    # 3. Fix dropped 'g' dialect (e.g., "swarmin ’", "flyin ’" -> "swarmin'", "flyin'")
+    # Looks for words ending in "in" followed by a space and an apostrophe
+    text = re.sub(r"\b(\w+in)\s+(['’])(?!\w)", r"\1\2", text, flags=re.IGNORECASE)
+
+    # 4. Fix spacing around punctuation
+    text = re.sub(r"\s+([,.!?;:\"')\]}])", r"\1", text)
+    text = re.sub(r"([(\[{])\s+", r"\1", text)
+
+    # 5. Fix double spaces and cleanup
     text = re.sub(r"\s{2,}", " ", text)
 
     return text.strip()
