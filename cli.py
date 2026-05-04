@@ -15,7 +15,6 @@ from sml_extractor.core import (
     run_booknlp,
 )
 from sml_extractor.sml_generator import (
-    generate_characters_json,
     generate_sml_macros,
     generate_sml_output,
 )
@@ -242,19 +241,13 @@ def _run_headless(args):
 
     macros_json_path = os.path.join(output_dir, f"{book_id}.sml.json")
     generate_sml_macros(characters, macros_json_path, voice_assignments)
-    progress(f"SML Macros JSON written to: {macros_json_path}", 90)
-
-    # Step 6: Generate characters JSON
-    char_json_path = os.path.join(output_dir, f"{book_id}.characters.json")
-    generate_characters_json(characters, char_json_path, voice_assignments)
-    progress(f"Characters JSON written to: {char_json_path}", 95)
+    progress(f"SML Macros JSON written to: {macros_json_path}", 95)
 
     progress("Done!", 100)
 
     print(f"\n=== Output Files ===")
     print(f"  SML text:        {sml_output_path}")
     print(f"  SML Macros:      {macros_json_path}")
-    print(f"  Characters JSON: {char_json_path}")
     if voice_assignments:
         print(f"\n  Use the SML file and Macros JSON with ebook2audiobook for multi-speaker audiobook generation.")
     else:

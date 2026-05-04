@@ -302,36 +302,6 @@ def _join_tokens(words: list) -> str:
     return text.strip()
 
 
-def generate_characters_json(
-    characters: list,
-    output_path: str,
-    voice_assignments: dict | None = None,
-) -> str:
-    """Generate characters_simple.json with voice assignments.
-
-    Args:
-        characters: List of character dicts.
-        output_path: Path to write the JSON file.
-        voice_assignments: Optional dict mapping character names to voice paths.
-
-    Returns:
-        Path to the generated JSON file.
-    """
-    if voice_assignments:
-        for char in characters:
-            name = char.get("normalized_name", "")
-            if name in voice_assignments:
-                char["voice"] = voice_assignments[name]
-
-    result = {"characters": characters}
-
-    os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(result, f, indent=2, ensure_ascii=False)
-
-    return output_path
-
-
 def generate_sml_macros(
     characters: list,
     output_path: str,
