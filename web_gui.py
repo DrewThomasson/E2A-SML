@@ -16,7 +16,11 @@ from sml_extractor.core import (
     load_booknlp_output,
     run_booknlp,
 )
-from sml_extractor.sml_generator import generate_characters_json, generate_sml_output
+from sml_extractor.sml_generator import (
+    generate_characters_json,
+    generate_sml_macros,
+    generate_sml_output,
+)
 from sml_extractor.voice_matcher import (
     auto_assign_voices,
     get_voice_category_info,
@@ -314,7 +318,15 @@ def generate_output(progress=gr.Progress()):
 
     # Generate SML text (uses token-level data when available)
     sml_path = os.path.join(output_dir, f"{book_id}.sml.txt")
-    generate_sml_output(booknlp_data, characters, sml_path, voice_assignments)
+    generate_sml_output(booknlp_data, characters, sml_path, voice_assignments, use_macros=True)
+
+    # Generate Macro JSON
+    macros_path = os.path.join(output_dir, f"{book_id}.sml.json")
+    generate_sml_macros(characters, macros_path, voice_assignments)
+
+    # Generate deprecated absolute paths SML
+    sml_deprecated_path = os.path.join(output_dir, f"{book_id}_absolute_paths.sml.txt")
+    generate_sml_output(booknlp_data, characters, sml_deprecated_path, voice_assignments, use_macros=False)
 
     progress(0.6, desc="Generating characters JSON...")
 
@@ -333,9 +345,11 @@ def generate_output(progress=gr.Progress()):
     progress(1.0, desc="Done!")
 
     return (
-        f"✅ Generated successfully!\n\nFiles:\n  - {sml_path}\n  - {char_json_path}",
+        f"✅ Generated successfully!\n\nFiles:\n  - {sml_path}\n  - {macros_path}\n  - {sml_deprecated_path}\n  - {char_json_path}",
         sml_preview,
         sml_path,
+        macros_path,
+        sml_deprecated_path,
         char_json_path,
     )
 
@@ -462,6 +476,9 @@ def create_app(default_e2a_path: str = ""):
 
             with gr.Row():
                 sml_download = gr.File(label="📥 Download SML Text", interactive=False)
+                macros_download = gr.File(label="📥 Download Macros JSON", interactive=False)
+            with gr.Row():
+                sml_deprecated_download = gr.File(label="📥 Download SML (legacy absolute paths)", interactive=False)
                 json_download = gr.File(label="📥 Download Characters JSON", interactive=False)
 
         # --- Wire up events ---
@@ -506,7 +523,7 @@ def create_app(default_e2a_path: str = ""):
         # Generate SML output
         generate_btn.click(
             fn=generate_output,
-            outputs=[gen_status, sml_preview, sml_download, json_download],
+            outputs=[gen_status, sml_preview, sml_download, macros_download, sml_deprecated_download, json_download],
         )
 
     return app

@@ -10,6 +10,7 @@ def generate_sml_output(
     characters: list,
     output_path: str,
     voice_assignments: dict | None = None,
+    use_macros: bool = True,
 ) -> str:
     """Generate SML-formatted text from BookNLP token-level and quote data.
 
@@ -38,11 +39,11 @@ def generate_sml_output(
 
     if tokens and quotes is not None:
         sml_content = _generate_from_tokens(
-            tokens, quotes, book_data, char_voice_map
+            tokens, quotes, book_data, char_voice_map, use_macros
         )
     elif "book_txt" in booknlp_data:
         sml_content = _generate_from_book_txt(
-            booknlp_data["book_txt"], char_voice_map
+            booknlp_data["book_txt"], char_voice_map, use_macros
         )
     else:
         raise ValueError(
@@ -61,6 +62,7 @@ def _generate_from_tokens(
     quotes: list,
     book_data: dict | None,
     char_voice_map: dict,
+    use_macros: bool = True,
 ) -> str:
     """Build SML using token-level quote boundaries.
 
@@ -131,7 +133,7 @@ def _generate_from_tokens(
 
     # Build SML output with voice tags
     sml_lines = []
-    active_voice = None
+    active_voice_tag = None
 
     for speaker, text in segments:
         if speaker is None:
@@ -143,25 +145,28 @@ def _generate_from_tokens(
             continue
 
         voice_path = char_voice_map.get(speaker)
+        voice_tag_val = speaker if use_macros else voice_path
 
-        if voice_path and voice_path != active_voice:
-            if active_voice is not None:
+        if voice_path and voice_tag_val != active_voice_tag:
+            if active_voice_tag is not None:
                 sml_lines.append("[/voice]")
-            sml_lines.append(f"[voice:{voice_path}]")
-            active_voice = voice_path
-        elif not voice_path and active_voice is not None:
+            sml_lines.append(f"[voice:{voice_tag_val}]")
+            active_voice_tag = voice_tag_val
+        elif not voice_path and active_voice_tag is not None:
             # No voice for this speaker but we have an open tag — keep it
             pass
 
-        sml_lines.append(text)
+        cleaned_text = clean_tts_text(text)
+        if cleaned_text:
+            sml_lines.append(cleaned_text)
 
-    if active_voice is not None:
+    if active_voice_tag is not None:
         sml_lines.append("[/voice]")
 
     return "\n".join(sml_lines)
 
 
-def _generate_from_book_txt(book_txt_content: str, char_voice_map: dict) -> str:
+def _generate_from_book_txt(book_txt_content: str, char_voice_map: dict, use_macros: bool = True) -> str:
     """Fallback: generate SML from sentence-level .book.txt."""
     lines = book_txt_content.strip().split("\n")
     sml_lines = []
@@ -181,15 +186,21 @@ def _generate_from_book_txt(book_txt_content: str, char_voice_map: dict) -> str:
                 continue
 
             voice_path = char_voice_map.get(char_name)
-            if voice_path and voice_path != current_voice:
+            voice_tag_val = char_name if use_macros else voice_path
+            
+            if voice_path and voice_tag_val != current_voice:
                 if current_voice is not None:
                     sml_lines.append("[/voice]")
-                sml_lines.append(f"[voice:{voice_path}]")
-                current_voice = voice_path
+                sml_lines.append(f"[voice:{voice_tag_val}]")
+                current_voice = voice_tag_val
 
-            sml_lines.append(text)
+            cleaned_text = clean_tts_text(text)
+            if cleaned_text:
+                sml_lines.append(cleaned_text)
         else:
-            sml_lines.append(line)
+            cleaned_line = clean_tts_text(line)
+            if cleaned_line:
+                sml_lines.append(cleaned_line)
 
     if current_voice is not None:
         sml_lines.append("[/voice]")
@@ -244,6 +255,23 @@ def _normalize_name(name: str) -> str:
     name = re.sub(r"[^a-zA-Z0-9\s]", "", name)
     parts = name.strip().split()
     return "".join(word.capitalize() for word in parts) if parts else "Unknown"
+
+
+def clean_tts_text(text: str) -> str:
+    """Filter out weird characters that might crash TTS engines like Tacotron.
+    
+    Keeps alphanumeric characters (including accents), spaces, and standard punctuation.
+    """
+    if not text:
+        return ""
+        
+    # Replace non-breaking space with normal space
+    text = text.replace('\u00A0', ' ')
+    # Keep alphanumeric (including accents), spaces, and standard punctuation
+    text = re.sub(r'[^\w\s\.,!\?;:\"\'\(\)\[\]\{\}\-—–“”‘’]', '', text)
+    # Remove extra spaces
+    text = re.sub(r'\s{2,}', ' ', text)
+    return text.strip()
 
 
 def _join_tokens(words: list) -> str:
@@ -301,6 +329,36 @@ def generate_characters_json(
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
 
+    return output_path
+
+
+def generate_sml_macros(
+    characters: list,
+    output_path: str,
+    voice_assignments: dict | None = None,
+) -> str:
+    """Generate the macro JSON file mapping character names to voice paths.
+    
+    Args:
+        characters: List of character dicts.
+        output_path: Path to write the JSON file.
+        voice_assignments: Optional dict mapping character names to voice paths.
+        
+    Returns:
+        Path to the generated JSON file.
+    """
+    voice_map = _build_voice_map(characters, voice_assignments)
+    
+    macros_data = {
+        "macros": {
+            "voices": voice_map
+        }
+    }
+    
+    os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(macros_data, f, indent=4, ensure_ascii=False)
+        
     return output_path
 
 

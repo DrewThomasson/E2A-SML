@@ -14,7 +14,11 @@ from sml_extractor.core import (
     load_booknlp_output,
     run_booknlp,
 )
-from sml_extractor.sml_generator import generate_characters_json, generate_sml_output
+from sml_extractor.sml_generator import (
+    generate_characters_json,
+    generate_sml_macros,
+    generate_sml_output,
+)
 from sml_extractor.voice_matcher import (
     auto_assign_voices,
     get_voice_display_name,
@@ -232,9 +236,19 @@ def _run_headless(args):
 
     sml_output_path = os.path.join(output_dir, f"{book_id}.sml.txt")
     generate_sml_output(
-        booknlp_data, characters, sml_output_path, voice_assignments
+        booknlp_data, characters, sml_output_path, voice_assignments, use_macros=True
     )
-    progress(f"SML output written to: {sml_output_path}", 90)
+    progress(f"SML output written to: {sml_output_path}", 85)
+
+    sml_deprecated_path = os.path.join(output_dir, f"{book_id}_absolute_paths.sml.txt")
+    generate_sml_output(
+        booknlp_data, characters, sml_deprecated_path, voice_assignments, use_macros=False
+    )
+    progress(f"SML deprecated output written to: {sml_deprecated_path}", 88)
+
+    macros_json_path = os.path.join(output_dir, f"{book_id}.sml.json")
+    generate_sml_macros(characters, macros_json_path, voice_assignments)
+    progress(f"SML Macros JSON written to: {macros_json_path}", 90)
 
     # Step 6: Generate characters JSON
     char_json_path = os.path.join(output_dir, f"{book_id}.characters.json")
@@ -245,10 +259,11 @@ def _run_headless(args):
 
     print(f"\n=== Output Files ===")
     print(f"  SML text:        {sml_output_path}")
+    print(f"  SML Macros:      {macros_json_path}")
+    print(f"  SML (legacy):    {sml_deprecated_path}")
     print(f"  Characters JSON: {char_json_path}")
     if voice_assignments:
-        print(f"\n  Voice assignments are embedded in the SML output.")
-        print(f"  Use the SML file with ebook2audiobook for multi-speaker audiobook generation.")
+        print(f"\n  Use the SML file and Macros JSON with ebook2audiobook for multi-speaker audiobook generation.")
     else:
         print(f"\n  No voices were matched from {args.e2a_path}.")
         print(f"  Check that voices/{args.language}/ contains voice files.")
