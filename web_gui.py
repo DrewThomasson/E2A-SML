@@ -264,36 +264,6 @@ def reassign_voice(char_name, voice_path):
     )
 
 
-def upload_custom_voice(voice_file, char_name):
-    """Handle uploading a custom voice file for a character."""
-    if voice_file is None or not char_name:
-        return gr.update(), "Please select a character and upload a voice file.", ""
-
-    work_dir = _session_state.get("work_dir", tempfile.mkdtemp(prefix="sml_extractor_"))
-    voices_dir = os.path.join(work_dir, "custom_voices")
-    os.makedirs(voices_dir, exist_ok=True)
-
-    voice_src = _get_file_path(voice_file)
-    voice_dest = os.path.join(voices_dir, os.path.basename(voice_src))
-    shutil.copy2(voice_src, voice_dest)
-
-    if "voice_assignments" not in _session_state:
-        _session_state["voice_assignments"] = {}
-    _session_state["voice_assignments"][char_name] = voice_dest
-
-    characters = _session_state.get("characters", [])
-    voice_assignments = _session_state["voice_assignments"]
-
-    char_table = _build_character_table(characters, voice_assignments)
-    detail = _format_char_detail(characters, voice_assignments, char_name)
-
-    return (
-        char_table,
-        f"✅ Assigned {os.path.basename(voice_dest)} to {char_name}",
-        detail,
-    )
-
-
 def generate_output(progress=gr.Progress()):
     """Generate the SML output files."""
     if "booknlp_data" not in _session_state:
@@ -430,15 +400,6 @@ def create_app(default_e2a_path: str = ""):
                         assign_btn = gr.Button("🎤 Assign Selected Voice", variant="primary")
                         assign_status = gr.Textbox(label="Status", interactive=False)
 
-                gr.Markdown("### ⬆️ Or Upload a Custom Voice File")
-                with gr.Row():
-                    voice_upload = gr.File(
-                        label="Upload Voice (.wav, .mp3, .flac, .ogg)",
-                        file_types=[".wav", ".mp3", ".flac", ".ogg"],
-                        type="filepath",
-                    )
-                    upload_btn = gr.Button("⬆️ Upload & Assign to Selected Character")
-                upload_status = gr.Textbox(label="Upload Status", interactive=False)
 
         with gr.Tab("📝 Preview & Generate"):
             book_preview = gr.Textbox(
@@ -495,13 +456,6 @@ def create_app(default_e2a_path: str = ""):
             fn=reassign_voice,
             inputs=[char_selector, voice_selector],
             outputs=[char_table, assign_status, char_detail],
-        )
-
-        # Upload custom voice → assign to selected character, update table
-        upload_btn.click(
-            fn=upload_custom_voice,
-            inputs=[voice_upload, char_selector],
-            outputs=[char_table, upload_status, char_detail],
         )
 
         # Generate SML output
