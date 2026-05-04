@@ -240,12 +240,6 @@ def _run_headless(args):
     )
     progress(f"SML output written to: {sml_output_path}", 85)
 
-    sml_deprecated_path = os.path.join(output_dir, f"{book_id}_absolute_paths.sml.txt")
-    generate_sml_output(
-        booknlp_data, characters, sml_deprecated_path, voice_assignments, use_macros=False
-    )
-    progress(f"SML deprecated output written to: {sml_deprecated_path}", 88)
-
     macros_json_path = os.path.join(output_dir, f"{book_id}.sml.json")
     generate_sml_macros(characters, macros_json_path, voice_assignments)
     progress(f"SML Macros JSON written to: {macros_json_path}", 90)
@@ -260,7 +254,6 @@ def _run_headless(args):
     print(f"\n=== Output Files ===")
     print(f"  SML text:        {sml_output_path}")
     print(f"  SML Macros:      {macros_json_path}")
-    print(f"  SML (legacy):    {sml_deprecated_path}")
     print(f"  Characters JSON: {char_json_path}")
     if voice_assignments:
         print(f"\n  Use the SML file and Macros JSON with ebook2audiobook for multi-speaker audiobook generation.")
