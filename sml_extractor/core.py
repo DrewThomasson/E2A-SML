@@ -21,8 +21,8 @@ def check_booknlp_installation() -> tuple[bool, str]:
         import booknlp  # noqa: F401
     except ImportError:
         errors.append(
-            "booknlp-plus is not installed. Install it with:\n"
-            "  pip install booknlp-plus"
+            "BookNLP local module is not found. Ensure the 'booknlp' directory "
+            "is in the same folder as this script."
         )
         return False, "\n".join(errors)
 
@@ -48,7 +48,7 @@ def check_booknlp_installation() -> tuple[bool, str]:
             "BookNLP dependencies are missing:\n"
             + "\n".join(errors)
             + "\n\nOr install all at once:\n"
-            "  pip install booknlp-plus\n"
+            "  pip install -r requirements.txt\n"
             "  python -m spacy download en_core_web_sm"
         )
 
@@ -72,8 +72,8 @@ def check_booknlp_installation() -> tuple[bool, str]:
         return False, (
             f"BookNLP failed to initialize: {e}\n\n"
             "This usually means a dependency version conflict.\n"
-            "Try reinstalling in a clean environment:\n"
-            "  pip install --force-reinstall booknlp-plus\n"
+            "Try reinstalling dependencies in a clean environment:\n"
+            "  pip install -r requirements.txt\n"
             "  python -m spacy download en_core_web_sm"
         )
 
