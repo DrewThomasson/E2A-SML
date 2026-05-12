@@ -32,9 +32,7 @@ def check_booknlp_installation() -> tuple[bool, str]:
         ("transformers", "transformers", "pip install transformers>=4.30.0"),
         ("spacy", "spacy", "pip install spacy>=3.5.0"),
         ("sentence_transformers", "sentence-transformers", "pip install sentence-transformers"),
-        ("tf_keras", "tf-keras", "pip install tf-keras"),
         ("numpy", "numpy", "pip install numpy>=1.24.0"),
-        ("pandas", "pandas", "pip install pandas>=1.3.0"),
     ]
 
     for module_name, pkg_name, install_cmd in dep_checks:
