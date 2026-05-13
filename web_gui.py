@@ -16,7 +16,7 @@ from sml_extractor.core import (
     load_booknlp_output,
     run_booknlp,
 )
-from sml_extractor.sml_generator import generate_characters_json, generate_sml_output
+from sml_extractor.sml_generator import generate_characters_json, generate_sml_macros, generate_sml_output
 from sml_extractor.voice_matcher import (
     auto_assign_voices,
     get_voice_category_info,
@@ -314,13 +314,19 @@ def generate_output(progress=gr.Progress()):
 
     # Generate SML text (uses token-level data when available)
     sml_path = os.path.join(output_dir, f"{book_id}.sml.txt")
-    generate_sml_output(booknlp_data, characters, sml_path, voice_assignments)
+    generate_sml_output(booknlp_data, characters, sml_path, voice_assignments, use_macros=True)
 
     progress(0.6, desc="Generating characters JSON...")
 
-    # Generate characters JSON
+    # Generate characters JSON (legacy output)
     char_json_path = os.path.join(output_dir, f"{book_id}.characters.json")
     generate_characters_json(characters, char_json_path, voice_assignments)
+
+    progress(0.75, desc="Generating SML macros JSON...")
+
+    # Generate SML macros JSON (new output)
+    macros_path = os.path.join(output_dir, f"{book_id}.sml.json")
+    generate_sml_macros(characters, macros_path, voice_assignments)
 
     progress(0.9, desc="Preparing download...")
 
@@ -333,10 +339,11 @@ def generate_output(progress=gr.Progress()):
     progress(1.0, desc="Done!")
 
     return (
-        f"✅ Generated successfully!\n\nFiles:\n  - {sml_path}\n  - {char_json_path}",
+        f"✅ Generated successfully!\n\nFiles:\n  - {sml_path}\n  - {char_json_path}\n  - {macros_path}",
         sml_preview,
         sml_path,
         char_json_path,
+        macros_path,
     )
 
 
@@ -463,6 +470,7 @@ def create_app(default_e2a_path: str = ""):
             with gr.Row():
                 sml_download = gr.File(label="📥 Download SML Text", interactive=False)
                 json_download = gr.File(label="📥 Download Characters JSON", interactive=False)
+                macros_download = gr.File(label="📥 Download SML Macros JSON", interactive=False)
 
         # --- Wire up events ---
 
@@ -506,7 +514,7 @@ def create_app(default_e2a_path: str = ""):
         # Generate SML output
         generate_btn.click(
             fn=generate_output,
-            outputs=[gen_status, sml_preview, sml_download, json_download],
+            outputs=[gen_status, sml_preview, sml_download, json_download, macros_download],
         )
 
     return app
