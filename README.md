@@ -1,3 +1,6 @@
+> [!IMPORTANT]
+> This repo is depricated Future updates of E2A-SML can be found [here](https://github.com/DrewThomasson/ebook2audiobook/tree/main/tools/E2A-SML) in [Ebook2audiobook](https://github.com/DrewThomasson/ebook2audiobook/tree/main/tools/E2A-SML)
+
 # 📚 SML Book Dialog Extractor
 
 Uses [BookNLP](https://github.com/DrewThomasson/booknlp) to analyze books, extract character dialog, and generate **SML-formatted output** for multi-speaker audiobook generation with [ebook2audiobook](https://github.com/DrewThomasson/ebook2audiobook).
