@@ -3,7 +3,6 @@
 
 import json
 import os
-import shutil
 import tempfile
 from pathlib import Path
 
@@ -16,12 +15,11 @@ from sml_extractor.core import (
     load_booknlp_output,
     run_booknlp,
 )
-from sml_extractor.sml_generator import generate_characters_json, generate_sml_output
+from sml_extractor.sml_generator import generate_sml_macros, generate_sml_output
 from sml_extractor.voice_matcher import (
     auto_assign_voices,
     get_voice_category_info,
     get_voice_display_name,
-    scan_custom_voices,
     scan_voice_library,
 )
 
@@ -261,36 +259,6 @@ def reassign_voice(char_name, voice_path):
     )
 
 
-def upload_custom_voice(voice_file, char_name):
-    """Handle uploading a custom voice file for a character."""
-    if voice_file is None or not char_name:
-        return gr.update(), "Please select a character and upload a voice file.", ""
-
-    work_dir = _session_state.get("work_dir", tempfile.mkdtemp(prefix="sml_extractor_"))
-    voices_dir = os.path.join(work_dir, "custom_voices")
-    os.makedirs(voices_dir, exist_ok=True)
-
-    voice_src = _get_file_path(voice_file)
-    voice_dest = os.path.join(voices_dir, os.path.basename(voice_src))
-    shutil.copy2(voice_src, voice_dest)
-
-    if "voice_assignments" not in _session_state:
-        _session_state["voice_assignments"] = {}
-    _session_state["voice_assignments"][char_name] = voice_dest
-
-    characters = _session_state.get("characters", [])
-    voice_assignments = _session_state["voice_assignments"]
-
-    char_table = _build_character_table(characters, voice_assignments)
-    detail = _format_char_detail(characters, voice_assignments, char_name)
-
-    return (
-        char_table,
-        f"✅ Assigned {os.path.basename(voice_dest)} to {char_name}",
-        detail,
-    )
-
-
 def generate_output(progress=gr.Progress()):
     """Generate the SML output files."""
     if "booknlp_data" not in _session_state:
@@ -312,15 +280,21 @@ def generate_output(progress=gr.Progress()):
     output_dir = os.path.join(work_dir, "sml_output")
     os.makedirs(output_dir, exist_ok=True)
 
-    # Generate SML text (uses token-level data when available)
+    # Generate SML text with macro-based voice tags (character names)
     sml_path = os.path.join(output_dir, f"{book_id}.sml.txt")
-    generate_sml_output(booknlp_data, characters, sml_path, voice_assignments)
+    generate_sml_output(booknlp_data, characters, sml_path, voice_assignments, use_macros=True)
 
-    progress(0.6, desc="Generating characters JSON...")
+    progress(0.5, desc="Generating deprecated SML (path-based)...")
 
-    # Generate characters JSON
-    char_json_path = os.path.join(output_dir, f"{book_id}.characters.json")
-    generate_characters_json(characters, char_json_path, voice_assignments)
+    # Generate deprecated SML with raw voice file paths in tags
+    deprecated_sml_path = os.path.join(output_dir, f"{book_id}.deprecated.sml.txt")
+    generate_sml_output(booknlp_data, characters, deprecated_sml_path, voice_assignments, use_macros=False)
+
+    progress(0.75, desc="Generating SML macros JSON...")
+
+    # Generate SML macros JSON
+    macros_path = os.path.join(output_dir, f"{book_id}.sml.json")
+    generate_sml_macros(characters, macros_path, voice_assignments)
 
     progress(0.9, desc="Preparing download...")
 
@@ -333,10 +307,11 @@ def generate_output(progress=gr.Progress()):
     progress(1.0, desc="Done!")
 
     return (
-        f"✅ Generated successfully!\n\nFiles:\n  - {sml_path}\n  - {char_json_path}",
+        f"✅ Generated successfully!\n\nFiles:\n  - {sml_path}\n  - {deprecated_sml_path}\n  - {macros_path}",
         sml_preview,
         sml_path,
-        char_json_path,
+        deprecated_sml_path,
+        macros_path,
     )
 
 
@@ -364,7 +339,7 @@ def create_app(default_e2a_path: str = ""):
             ### How it works:
             1. **Upload** a book file (.txt, .epub, .mobi, etc.)
             2. **Analyze** - BookNLP identifies characters, dialog, and narration
-            3. **Assign voices** - Auto-assign from ebook2audiobook library or upload custom voices
+            3. **Assign voices** - Auto-assign from ebook2audiobook library
             4. **Generate** - Download SML output ready for ebook2audiobook
             """
         )
@@ -429,16 +404,6 @@ def create_app(default_e2a_path: str = ""):
                         assign_btn = gr.Button("🎤 Assign Selected Voice", variant="primary")
                         assign_status = gr.Textbox(label="Status", interactive=False)
 
-                gr.Markdown("### ⬆️ Or Upload a Custom Voice File")
-                with gr.Row():
-                    voice_upload = gr.File(
-                        label="Upload Voice (.wav, .mp3, .flac, .ogg)",
-                        file_types=[".wav", ".mp3", ".flac", ".ogg"],
-                        type="filepath",
-                    )
-                    upload_btn = gr.Button("⬆️ Upload & Assign to Selected Character")
-                upload_status = gr.Textbox(label="Upload Status", interactive=False)
-
         with gr.Tab("📝 Preview & Generate"):
             book_preview = gr.Textbox(
                 label="📖 Book Text Preview (BookNLP tagged)",
@@ -461,8 +426,9 @@ def create_app(default_e2a_path: str = ""):
             )
 
             with gr.Row():
-                sml_download = gr.File(label="📥 Download SML Text", interactive=False)
-                json_download = gr.File(label="📥 Download Characters JSON", interactive=False)
+                sml_download = gr.File(label="📥 Download SML Text (macro)", interactive=False)
+                deprecated_sml_download = gr.File(label="📥 Download Deprecated SML (path-based)", interactive=False)
+                macros_download = gr.File(label="📥 Download SML Macros JSON", interactive=False)
 
         # --- Wire up events ---
 
@@ -496,17 +462,10 @@ def create_app(default_e2a_path: str = ""):
             outputs=[char_table, assign_status, char_detail],
         )
 
-        # Upload custom voice → assign to selected character, update table
-        upload_btn.click(
-            fn=upload_custom_voice,
-            inputs=[voice_upload, char_selector],
-            outputs=[char_table, upload_status, char_detail],
-        )
-
         # Generate SML output
         generate_btn.click(
             fn=generate_output,
-            outputs=[gen_status, sml_preview, sml_download, json_download],
+            outputs=[gen_status, sml_preview, sml_download, deprecated_sml_download, macros_download],
         )
 
     return app
