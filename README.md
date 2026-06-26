@@ -1,5 +1,5 @@
 > [!IMPORTANT]
-> This repo is depricated Future updates of E2A-SML can be found [here](https://github.com/DrewThomasson/ebook2audiobook/tree/main/tools/E2A-SML) in [Ebook2audiobook](https://github.com/DrewThomasson/ebook2audiobook/tree/main/tools/E2A-SML)
+> This repo is depricated Future updates of E2A-SML can be found [here](https://github.com/DrewThomasson/ebook2audiobook/tree/main/components/E2A-SML/) in [Ebook2audiobook](https://github.com/DrewThomasson/ebook2audiobook/tree/main/components/E2A-SML/)
 
 # 📚 SML Book Dialog Extractor
 
