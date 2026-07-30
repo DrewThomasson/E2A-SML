@@ -11,8 +11,9 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Download spaCy English model
-RUN python -m spacy download en_core_web_sm
+# Download spaCy models for all supported languages
+RUN python -m spacy download en_core_web_sm && \
+    python -m spacy download fr_core_news_sm
 
 # Copy application code
 COPY . .

@@ -8,15 +8,86 @@ from collections import Counter
 from pathlib import Path
 
 
-def check_booknlp_installation() -> tuple[bool, str]:
-    """Check if BookNLP and its dependencies are properly installed.
+# Supported language configurations.
+# booknlp_lang: language code passed to BookNLP("lang", ...)
+# voice_lang:   sub-directory under voices/ in ebook2audiobook
+# spacy_model:  spaCy model required by this language
+# pipeline:     BookNLP pipeline components (French doesn't support supersense/event)
+LANGUAGE_CONFIGS = {
+    "en": {
+        "booknlp_lang": "en",
+        "voice_lang": "eng",
+        "spacy_model": "en_core_web_sm",
+        "pipeline": "entity,quote,supersense,event,coref",
+        "display_name": "English",
+    },
+    "fr": {
+        "booknlp_lang": "fr",
+        "voice_lang": "fra",
+        "spacy_model": "fr_core_news_sm",
+        "pipeline": "entity,quote,coref",
+        "display_name": "French",
+    },
+}
+
+# Aliases that map common alternate codes to a canonical key in LANGUAGE_CONFIGS
+_LANGUAGE_ALIASES = {
+    "eng": "en",
+    "english": "en",
+    "fra": "fr",
+    "french": "fr",
+    "français": "fr",
+    "francais": "fr",
+}
+
+
+def normalize_language_code(lang: str) -> str:
+    """Normalise a user-supplied language string to a canonical two-letter code.
+
+    Accepts values such as "en", "eng", "English", "fr", "fra", "French".
+    Falls back to "en" for unrecognised inputs.
+    """
+    key = lang.strip().lower()
+    # Direct match first
+    if key in LANGUAGE_CONFIGS:
+        return key
+    # Alias lookup
+    return _LANGUAGE_ALIASES.get(key, "en")
+
+
+def check_booknlp_installation(language: str = "en") -> tuple[bool, str]:
+    """Check if the NLP backend and its dependencies are properly installed.
+
+    For French, the built-in ``FrenchBookNLP`` (spaCy-based) is used and only
+    the ``fr_core_news_sm`` spaCy model is required.  For English,
+    ``booknlp-plus`` and its dependencies are checked as before.
+
+    Args:
+        language: Language to check ('en' or 'fr').  The appropriate spaCy
+                  model for that language is verified.
 
     Returns:
         Tuple of (is_ok, message). If not ok, message describes what's missing.
     """
+    lang = normalize_language_code(language)
+    lang_cfg = LANGUAGE_CONFIGS[lang]
+    spacy_model = lang_cfg["spacy_model"]
+
     errors = []
 
-    # Check booknlp package
+    # French uses the built-in FrenchBookNLP — only spaCy is needed.
+    if lang == "fr":
+        try:
+            import spacy
+            spacy.load(spacy_model)
+        except OSError:
+            errors.append(
+                f"spaCy French model not found. Install it with:\n"
+                f"  python -m spacy download {spacy_model}"
+            )
+        return (False, "\n".join(errors)) if errors else (True, "French NLP (spaCy) is ready.")
+
+    # --- English: check booknlp-plus and all its dependencies ---
     try:
         import booknlp  # noqa: F401
     except ImportError:
@@ -49,17 +120,18 @@ def check_booknlp_installation() -> tuple[bool, str]:
             + "\n".join(errors)
             + "\n\nOr install all at once:\n"
             "  pip install booknlp-plus\n"
-            "  python -m spacy download en_core_web_sm"
+            f"  python -m spacy download {spacy_model}"
         )
 
-    # Check spacy model
+    # Check spacy model for the requested language
     try:
         import spacy
-        spacy.load("en_core_web_sm")
+        spacy.load(spacy_model)
     except OSError:
+        lang_display = lang_cfg["display_name"]
         errors.append(
-            "spaCy English model not found. Install it with:\n"
-            "  python -m spacy download en_core_web_sm"
+            f"spaCy {lang_display} model not found. Install it with:\n"
+            f"  python -m spacy download {spacy_model}"
         )
 
     if errors:
@@ -74,7 +146,7 @@ def check_booknlp_installation() -> tuple[bool, str]:
             "This usually means a dependency version conflict.\n"
             "Try reinstalling in a clean environment:\n"
             "  pip install --force-reinstall booknlp-plus\n"
-            "  python -m spacy download en_core_web_sm"
+            f"  python -m spacy download {spacy_model}"
         )
 
     return True, "BookNLP is ready."
@@ -116,6 +188,7 @@ def run_booknlp(
     input_file: str,
     output_dir: str,
     model: str = "small",
+    language: str = "en",
     progress_callback=None,
 ) -> dict:
     """Run BookNLP pipeline on a text file and return extracted data.
@@ -124,39 +197,56 @@ def run_booknlp(
         input_file: Path to the input text file.
         output_dir: Directory for BookNLP output files.
         model: BookNLP model size ('small' or 'big').
+        language: Language code for BookNLP ('en' for English, 'fr' for French).
+                  Also accepts aliases such as 'eng', 'fra'.
         progress_callback: Optional callable(message, pct) for progress updates.
 
     Returns:
         Dict with keys: 'book_id', 'output_dir', 'characters', 'tokens_file',
-                        'quotes_file', 'entities_file', 'book_file'
+                        'quotes_file', 'entities_file', 'book_file', 'language'
 
     Raises:
         RuntimeError: If BookNLP or its dependencies are not properly installed.
     """
+    lang = normalize_language_code(language)
+    lang_cfg = LANGUAGE_CONFIGS[lang]
+
     # Pre-check installation before attempting import
-    ok, msg = check_booknlp_installation()
+    ok, msg = check_booknlp_installation(lang)
     if not ok:
         raise RuntimeError(f"BookNLP installation check failed:\n{msg}")
-
-    from booknlp.booknlp import BookNLP
 
     os.makedirs(output_dir, exist_ok=True)
     book_id = Path(input_file).stem
 
     if progress_callback:
-        progress_callback("Initializing BookNLP...", 5)
+        progress_callback("Initializing NLP pipeline...", 5)
 
-    model_params = {
-        "pipeline": "entity,quote,supersense,event,coref",
-        "model": model,
-    }
+    if lang == "fr":
+        # Use the built-in spaCy-based French pipeline (no trained model files
+        # needed beyond fr_core_news_sm which is already in the Docker image).
+        from sml_extractor.french_booknlp import FrenchBookNLP
 
-    booknlp = BookNLP("en", model_params)
+        model_params = {"spacy_model": lang_cfg["spacy_model"]}
+        nlp = FrenchBookNLP(model_params)
+        if progress_callback:
+            progress_callback(
+                f"Processing book with French NLP pipeline ({lang_cfg['display_name']})...", 10
+            )
+    else:
+        from booknlp.booknlp import BookNLP
 
-    if progress_callback:
-        progress_callback(f"Processing book with BookNLP ({model} model)...", 10)
+        model_params = {
+            "pipeline": lang_cfg["pipeline"],
+            "model": model,
+        }
+        nlp = BookNLP(lang_cfg["booknlp_lang"], model_params)
+        if progress_callback:
+            progress_callback(
+                f"Processing book with BookNLP ({model} model, {lang_cfg['display_name']})...", 10
+            )
 
-    booknlp.process(input_file, output_dir, book_id)
+    nlp.process(input_file, output_dir, book_id)
 
     if progress_callback:
         progress_callback("BookNLP processing complete.", 60)
@@ -164,6 +254,7 @@ def run_booknlp(
     result = {
         "book_id": book_id,
         "output_dir": output_dir,
+        "language": lang,
         "tokens_file": os.path.join(output_dir, f"{book_id}.tokens"),
         "quotes_file": os.path.join(output_dir, f"{book_id}.quotes"),
         "entities_file": os.path.join(output_dir, f"{book_id}.entities"),
@@ -263,12 +354,22 @@ def _parse_entities_file(filepath: str) -> list:
     return entities
 
 
-def extract_characters(booknlp_data: dict) -> list:
+def extract_characters(booknlp_data: dict, language: str = "en") -> list:
     """Extract character information from BookNLP output.
 
-    Returns list of character dicts with:
-        normalized_name, inferred_gender, inferred_age_category, voice, language
+    Args:
+        booknlp_data: Dict returned by load_booknlp_output().
+        language: Language code ('en' or 'fr').  Used to set the 'language'
+                  field in the returned character dicts to the matching
+                  ebook2audiobook voice-library language code (e.g. 'eng', 'fra').
+
+    Returns:
+        List of character dicts with:
+            normalized_name, inferred_gender, inferred_age_category, voice, language
     """
+    lang = normalize_language_code(language)
+    voice_lang = LANGUAGE_CONFIGS[lang]["voice_lang"]
+
     # If characters_simple already exists from BookNLP, use that
     if "characters_simple" in booknlp_data:
         return booknlp_data["characters_simple"].get("characters", [])
@@ -283,7 +384,7 @@ def extract_characters(booknlp_data: dict) -> list:
             "inferred_gender": "unknown",
             "inferred_age_category": "unknown",
             "tts_engine": "XTTSv2",
-            "language": "eng",
+            "language": voice_lang,
             "voice": None,
         }
     )
@@ -307,7 +408,7 @@ def extract_characters(booknlp_data: dict) -> list:
                 "inferred_gender": gender,
                 "inferred_age_category": age,
                 "tts_engine": "XTTSv2",
-                "language": "eng",
+                "language": voice_lang,
                 "voice": None,
             }
         )

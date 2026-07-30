@@ -11,6 +11,7 @@ Uses [BookNLP](https://github.com/DrewThomasson/booknlp) to analyze books, extra
 - **Dialog attribution** — determines who speaks each line of dialog
 - **SML output** — generates `[voice:]...[/voice]` tagged text compatible with ebook2audiobook
 - **Voice auto-assignment** — matches characters to appropriate voices from the ebook2audiobook voice library based on gender and age
+- **Multi-language support** — processes books in **English** and **French** using BookNLP's language-specific models
 - **Web GUI** — Gradio-based web interface for easy voice assignment and preview
 - **Headless CLI** — full command-line interface for batch/automated processing
 - **Docker support** — fully containerized with all dependencies pre-installed
@@ -59,7 +60,8 @@ docker run -v ~/ebook2audiobook:/ebook2audiobook -v ./output:/app/output \
 git clone https://github.com/DrewThomasson/E2A-SML.git
 cd E2A-SML
 pip install -r requirements.txt
-python -m spacy download en_core_web_sm
+python -m spacy download en_core_web_sm   # English
+python -m spacy download fr_core_news_sm  # French (optional)
 ```
 
 ### Web GUI
@@ -88,6 +90,9 @@ python cli.py mybook.epub --e2a-path ~/ebook2audiobook
 
 # Use the more accurate (but slower) BookNLP model
 python cli.py mybook.txt --e2a-path ~/ebook2audiobook --model big
+
+# Process a French book
+python cli.py monlivre.txt --e2a-path ~/ebook2audiobook --language fr
 
 # Use pre-existing BookNLP output
 python cli.py --booknlp-dir existing_output/ --book-id mybook --e2a-path ~/ebook2audiobook -o sml_output/
@@ -200,7 +205,7 @@ Options:
   --model {small,big}     BookNLP model size (default: small)
   --e2a-path              Path to ebook2audiobook repo for voice auto-assignment
   --voices-dir            Path to custom voice files directory
-  --language              Language code for voice selection (default: eng)
+  --language              Book language: en/eng (English, default) or fr/fra (French)
   --booknlp-dir           Use existing BookNLP output directory
   --book-id               Book ID for loading existing BookNLP output
   --gui                   Launch web GUI
@@ -220,6 +225,7 @@ Options:
 - [BookNLP-plus](https://github.com/DrewThomasson/booknlp) (installed via requirements.txt)
 - [Calibre](https://calibre-ebook.com/download) (optional, for non-txt ebook formats)
 - [ebook2audiobook](https://github.com/DrewThomasson/ebook2audiobook) (required, for voice library)
+- French spaCy model: `python -m spacy download fr_core_news_sm` (only required for French books)
 
 ## 📄 License
 

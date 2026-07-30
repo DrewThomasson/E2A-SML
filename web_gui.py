@@ -10,10 +10,12 @@ from pathlib import Path
 import gradio as gr
 
 from sml_extractor.core import (
+    LANGUAGE_CONFIGS,
     check_booknlp_installation,
     convert_ebook_to_txt,
     extract_characters,
     load_booknlp_output,
+    normalize_language_code,
     run_booknlp,
 )
 from sml_extractor.sml_generator import generate_characters_json, generate_sml_output
@@ -58,6 +60,7 @@ def process_book(
     input_file,
     model_size,
     e2a_path,
+    language,
     progress=gr.Progress(),
 ):
     """Process a book file through BookNLP and extract characters."""
@@ -83,11 +86,15 @@ def process_book(
             "Make sure this is the ebook2audiobook repository root."
         )
 
+    lang = normalize_language_code(language)
+    voice_lang = LANGUAGE_CONFIGS[lang]["voice_lang"]
+
     progress(0.05, desc="Preparing...")
 
     # Create temp working directory
     work_dir = tempfile.mkdtemp(prefix="sml_extractor_")
     _session_state["work_dir"] = work_dir
+    _session_state["language"] = lang
 
     input_path = _get_file_path(input_file)
 
@@ -102,14 +109,15 @@ def process_book(
     booknlp_dir = os.path.join(work_dir, "booknlp")
     progress(0.12, desc="Checking BookNLP installation...")
 
-    ok, msg = check_booknlp_installation()
+    ok, msg = check_booknlp_installation(lang)
     if not ok:
         raise gr.Error(f"BookNLP is not properly installed:\n{msg}")
 
-    progress(0.15, desc=f"Running BookNLP ({model_size} model)... This may take a while.")
+    lang_display = LANGUAGE_CONFIGS[lang]["display_name"]
+    progress(0.15, desc=f"Running BookNLP ({model_size} model, {lang_display})... This may take a while.")
 
     try:
-        result = run_booknlp(txt_path, booknlp_dir, model_size)
+        result = run_booknlp(txt_path, booknlp_dir, model_size, lang)
     except Exception as e:
         raise gr.Error(f"BookNLP processing failed: {e}")
 
@@ -124,13 +132,13 @@ def process_book(
     _session_state["booknlp_data"] = booknlp_data
 
     # Extract characters
-    characters = extract_characters(booknlp_data)
+    characters = extract_characters(booknlp_data, lang)
     _session_state["characters"] = characters
 
     progress(0.7, desc="Scanning voice library...")
 
-    # Scan voice library from ebook2audiobook
-    voice_library = scan_voice_library(e2a_path)
+    # Scan voice library from ebook2audiobook using the correct language sub-directory
+    voice_library = scan_voice_library(e2a_path, voice_lang)
     _session_state["voice_library"] = voice_library
     _session_state["e2a_path"] = e2a_path
 
@@ -384,6 +392,12 @@ def create_app(default_e2a_path: str = ""):
                         label="🧠 BookNLP Model",
                         info="'big' is more accurate but slower and requires more RAM/GPU",
                     )
+                    language = gr.Radio(
+                        [("English", "en"), ("French", "fr")],
+                        value="en",
+                        label="🌍 Book Language",
+                        info="Select the language of the book. French uses a different BookNLP model and pipeline (entity/quote/coref only — no supersense or event).",
+                    )
                     e2a_path = gr.Textbox(
                         label="📂 ebook2audiobook Path (required)",
                         placeholder="/path/to/ebook2audiobook",
@@ -469,7 +483,7 @@ def create_app(default_e2a_path: str = ""):
         # Process book → populate character table, dropdowns, and preview
         process_btn.click(
             fn=process_book,
-            inputs=[input_file, model_size, e2a_path],
+            inputs=[input_file, model_size, e2a_path, language],
             outputs=[
                 status_output,
                 char_table,
