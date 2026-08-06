@@ -14,7 +14,7 @@ from sml_extractor.core import (
     load_booknlp_output,
     run_booknlp,
 )
-from sml_extractor.sml_generator import generate_characters_json, generate_sml_output
+from sml_extractor.sml_generator import generate_sml_macros, generate_sml_output
 from sml_extractor.voice_matcher import (
     auto_assign_voices,
     get_voice_display_name,
@@ -225,27 +225,35 @@ def _run_headless(args):
         print(f"  {name} -> {get_voice_display_name(voice)}")
     print()
 
-    # Step 5: Generate SML output
+    # Step 5: Generate SML output (macro-based: voice tags use character names)
     if not booknlp_data.get("tokens") and "book_txt" not in booknlp_data:
         print("Error: No token data or book.txt found in BookNLP output. Cannot generate SML.")
         sys.exit(1)
 
     sml_output_path = os.path.join(output_dir, f"{book_id}.sml.txt")
     generate_sml_output(
-        booknlp_data, characters, sml_output_path, voice_assignments
+        booknlp_data, characters, sml_output_path, voice_assignments, use_macros=True
     )
-    progress(f"SML output written to: {sml_output_path}", 90)
+    progress(f"SML output written to: {sml_output_path}", 88)
 
-    # Step 6: Generate characters JSON
-    char_json_path = os.path.join(output_dir, f"{book_id}.characters.json")
-    generate_characters_json(characters, char_json_path, voice_assignments)
-    progress(f"Characters JSON written to: {char_json_path}", 95)
+    # Step 6: Generate deprecated SML output (path-based: voice tags use raw file paths)
+    deprecated_sml_path = os.path.join(output_dir, f"{book_id}.deprecated.sml.txt")
+    generate_sml_output(
+        booknlp_data, characters, deprecated_sml_path, voice_assignments, use_macros=False
+    )
+    progress(f"Deprecated SML (path-based) written to: {deprecated_sml_path}", 92)
+
+    # Step 7: Generate SML macros JSON
+    macros_json_path = os.path.join(output_dir, f"{book_id}.sml.json")
+    generate_sml_macros(characters, macros_json_path, voice_assignments)
+    progress(f"SML Macros JSON written to: {macros_json_path}", 97)
 
     progress("Done!", 100)
 
     print(f"\n=== Output Files ===")
-    print(f"  SML text:        {sml_output_path}")
-    print(f"  Characters JSON: {char_json_path}")
+    print(f"  SML text (macro):      {sml_output_path}")
+    print(f"  SML text (deprecated): {deprecated_sml_path}")
+    print(f"  SML Macros JSON:       {macros_json_path}")
     if voice_assignments:
         print(f"\n  Voice assignments are embedded in the SML output.")
         print(f"  Use the SML file with ebook2audiobook for multi-speaker audiobook generation.")
