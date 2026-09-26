@@ -57,14 +57,13 @@ def _voice_display_label(voice_path: str) -> str:
 def process_book(
     input_file:str|None,
     model_size:str,
-    library_root:str,
     progress:gr.Progress=gr.Progress(),
 )->tuple[object,...]:
     """Process a book file through BookNLP and extract characters."""
     if input_file is None:
         raise gr.Error("Please upload a book file.")
 
-    library_root = os.path.expanduser((library_root or '').strip() or str(configured_library_root()))
+    library_root = str(configured_library_root())
     try:
         ensure_voice_library(library_root)
     except Exception as exc:
@@ -96,7 +95,7 @@ def process_book(
     progress(0.15, desc=f"Running BookNLP ({model_size} model)... This may take a while.")
 
     try:
-        result = run_booknlp(txt_path, booknlp_dir, model_size, e2a_path=library_root)
+        result = run_booknlp(txt_path, booknlp_dir, model_size, data_root=library_root)
     except Exception as e:
         raise gr.Error(f"BookNLP processing failed: {e}")
 
@@ -116,7 +115,7 @@ def process_book(
 
     progress(0.7, desc="Scanning voice library...")
 
-    # Scan the selected voice library
+    # Scan this tool's voice library
     voice_library = scan_voice_library(library_root)
     _session_state["voice_library"] = voice_library
     _session_state["library_root"] = library_root
@@ -293,15 +292,8 @@ def generate_output(progress:gr.Progress=gr.Progress())->tuple[str,str,str]:
     )
 
 
-def create_app(default_library_root:str='')->gr.Blocks:
-    if not default_library_root:
-        default_library_root = str(configured_library_root())
-    
-    """Create the Gradio web interface.
-
-    Args:
-        default_library_root: Default folder for voices and BookNLP models.
-    """
+def create_app()->gr.Blocks:
+    """Create the Gradio web interface."""
 
     with gr.Blocks(
         title="SML Book Dialog Extractor",
@@ -322,7 +314,7 @@ def create_app(default_library_root:str='')->gr.Blocks:
             ### How it works:
             1. **Upload** a book file (.txt, .epub, .mobi, etc.)
             2. **Analyze** - BookNLP identifies characters, dialog, and narration
-            3. **Assign voices** - Auto-assign from the selected voice library
+            3. **Assign voices** - Auto-assign from this tool's voice library
             4. **Generate** - Download SML output ready for ebook2audiobook
             """
         )
@@ -342,12 +334,6 @@ def create_app(default_library_root:str='')->gr.Blocks:
                         label="🧠 BookNLP Model",
                         info="'big' is more accurate but slower and requires more RAM/GPU",
                     )
-                    library_root = gr.Textbox(
-                        label="📂 Voice Library Folder",
-                        placeholder="/path/to/voice-library-data",
-                        value=default_library_root,
-                        info="Stores voices and BookNLP models here; an E2A checkout can be used instead",
-                    )
 
             process_btn = gr.Button("🔍 Analyze Book", variant="primary", size="lg")
             status_output = gr.Textbox(label="Status", interactive=False)
@@ -356,7 +342,7 @@ def create_app(default_library_root:str='')->gr.Blocks:
             gr.Markdown(
                 "After analyzing a book, all detected characters are listed below with their "
                 "**inferred gender** and **age category** from BookNLP. Voices are auto-assigned "
-                "from the selected voice library. Select any character to change its voice."
+                "from this tool's voice library. Select any character to change its voice."
             )
 
             char_table = gr.Dataframe(
@@ -415,7 +401,7 @@ def create_app(default_library_root:str='')->gr.Blocks:
         # Process book → populate character table, dropdowns, and preview
         process_btn.click(
             fn=process_book,
-            inputs=[input_file, model_size, library_root],
+            inputs=[input_file, model_size],
             outputs=[
                 status_output,
                 char_table,

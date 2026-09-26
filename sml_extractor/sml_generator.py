@@ -6,9 +6,9 @@ import re
 from pathlib import Path
 
 
-def portable_voice_assignments(voice_assignments:dict[str,str], e2a_path:str)->dict[str,str]:
-    """Express library voices relative to the E2A root used for synthesis."""
-    voices_root = Path(e2a_path).expanduser().resolve() / 'voices'
+def portable_voice_assignments(voice_assignments:dict[str,str], library_root:str)->dict[str,str]:
+    """Express library voices as paths relative to a voices/ folder."""
+    voices_root = Path(library_root).expanduser().resolve() / 'voices'
     portable:dict[str,str] = {}
     for character, voice_path in voice_assignments.items():
         try:
