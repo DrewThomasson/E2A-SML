@@ -2,19 +2,20 @@
 """Command-line interface for SML Book Dialog Extractor."""
 
 import argparse
-import json
 import os
 import sys
 from pathlib import Path
 
 from sml_extractor.core import (
+    configure_booknlp_cache,
     check_booknlp_installation,
     convert_ebook_to_txt,
     extract_characters,
     load_booknlp_output,
     run_booknlp,
 )
-from sml_extractor.sml_generator import generate_characters_json, generate_sml_output
+from sml_extractor.sml_generator import generate_sml_output, portable_voice_assignments
+from sml_extractor.voice_library import configured_library_root, ensure_voice_library
 from sml_extractor.voice_matcher import (
     auto_assign_voices,
     get_voice_display_name,
@@ -23,23 +24,23 @@ from sml_extractor.voice_matcher import (
 )
 
 
-def main():
+def main()->None:
     parser = argparse.ArgumentParser(
         description="SML Book Dialog Extractor - Convert books to SML format for ebook2audiobook",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   # Basic usage - process a book and generate SML output
-  python cli.py input_book.txt --e2a-path /path/to/ebook2audiobook
+  python cli.py input_book.txt
 
   # With custom output directory
-  python cli.py input_book.txt --e2a-path ~/ebook2audiobook -o output/
+  python cli.py input_book.txt --library-root ~/ebook2audiobook -o output/
 
   # Process an epub file (requires Calibre)
-  python cli.py mybook.epub --e2a-path ~/ebook2audiobook
+  python cli.py mybook.epub
 
   # Use pre-existing BookNLP output
-  python cli.py --booknlp-dir existing_output/ --book-id mybook --e2a-path ~/ebook2audiobook -o sml_output/
+  python cli.py --booknlp-dir existing_output/ --book-id mybook -o sml_output/
 
   # Launch web GUI instead
   python cli.py --gui
@@ -60,13 +61,15 @@ Examples:
     parser.add_argument(
         "--model",
         choices=["small", "big"],
-        default="small",
-        help="BookNLP model size (default: small)",
+        default="big",
+        help="BookNLP model size (default: big)",
     )
     parser.add_argument(
-        "--e2a-path",
-        help="Path to ebook2audiobook repository (required for voice assignment). "
-        "Supports ~ for home directory, e.g. ~/ebook2audiobook",
+        "--library-root", "--e2a-path",
+        dest="library_root",
+        default=str(configured_library_root()),
+        help="Folder containing voices/ and models/ (default: this tool's data/ folder). "
+        "--e2a-path remains an alias for an existing E2A checkout.",
     )
     parser.add_argument(
         "--voices-dir",
@@ -75,7 +78,7 @@ Examples:
     parser.add_argument(
         "--language",
         default="eng",
-        help="Language code for voice selection (default: eng)",
+        help="Voice-library language code (default: eng); book analysis supports English only",
     )
     parser.add_argument(
         "--booknlp-dir",
@@ -98,8 +101,8 @@ Examples:
     parser.add_argument(
         "--port",
         type=int,
-        default=7860,
-        help="Port for web GUI (default: 7860)",
+        default=7861,
+        help="Port for web GUI (default: 7861)",
     )
     parser.add_argument(
         "--share",
@@ -110,8 +113,9 @@ Examples:
     args = parser.parse_args()
 
     # Expand ~ in all path arguments
-    if args.e2a_path:
-        args.e2a_path = os.path.expanduser(args.e2a_path)
+    args.library_root = os.path.expanduser(args.library_root)
+    if not args.library_root.strip():
+        parser.error("--library-root must not be empty")
     if args.output_dir:
         args.output_dir = os.path.expanduser(args.output_dir)
     if args.voices_dir:
@@ -120,7 +124,7 @@ Examples:
         args.booknlp_dir = os.path.expanduser(args.booknlp_dir)
     if args.input_file:
         args.input_file = os.path.expanduser(args.input_file)
-
+    configure_booknlp_cache(args.library_root)
     if args.gui:
         _launch_gui(args)
         return
@@ -128,26 +132,20 @@ Examples:
     if not args.input_file and not args.booknlp_dir:
         parser.error("Either input_file or --booknlp-dir is required (or use --gui)")
 
-    if not args.e2a_path:
-        parser.error("--e2a-path is required. Provide the path to your ebook2audiobook folder.")
 
-    if not os.path.isdir(args.e2a_path):
-        parser.error(f"ebook2audiobook path not found: {args.e2a_path}")
 
-    voices_dir = os.path.join(args.e2a_path, "voices")
-    if not os.path.isdir(voices_dir):
-        parser.error(
-            f"No 'voices/' directory found in {args.e2a_path}. "
-            "Make sure this is the ebook2audiobook repository root."
-        )
+    try:
+        ensure_voice_library(args.library_root)
+    except Exception as exc:
+        parser.error(f"Unable to prepare the voice library: {exc}")
 
     _run_headless(args)
 
 
-def _run_headless(args):
+def _run_headless(args:argparse.Namespace)->None:
     """Run in headless/CLI mode."""
 
-    def progress(msg, pct=0):
+    def progress(msg:str, pct:int=0)->None:
         print(f"[{pct:3d}%] {msg}")
 
     # Check BookNLP installation before starting
@@ -188,7 +186,7 @@ def _run_headless(args):
         progress(f"Text file: {txt_file}", 5)
 
         booknlp_dir = os.path.join(output_dir, "booknlp")
-        result = run_booknlp(txt_file, booknlp_dir, args.model, progress)
+        result = run_booknlp(txt_file, booknlp_dir, args.model, progress, e2a_path=args.library_root)
         book_id = result["book_id"]
 
     # Step 2: Load BookNLP data
@@ -208,10 +206,10 @@ def _run_headless(args):
         print(f"  {i + 1}. {name} (gender: {gender}, age: {age})")
     print()
 
-    # Step 4: Auto-assign voices from ebook2audiobook voice library
+    # Step 4: Auto-assign voices from the selected voice library
     voice_assignments = {}
-    progress("Scanning ebook2audiobook voice library...", 75)
-    voice_library = scan_voice_library(args.e2a_path, args.language)
+    progress("Scanning voice library...", 75)
+    voice_library = scan_voice_library(args.library_root, args.language)
     custom_voices = (
         scan_custom_voices(args.voices_dir) if args.voices_dir else None
     )
@@ -225,51 +223,44 @@ def _run_headless(args):
         print(f"  {name} -> {get_voice_display_name(voice)}")
     print()
 
-    # Step 5: Generate SML output
+    # Generate SML with voice paths that ebook2audiobook accepts directly.
     if not booknlp_data.get("tokens") and "book_txt" not in booknlp_data:
         print("Error: No token data or book.txt found in BookNLP output. Cannot generate SML.")
         sys.exit(1)
 
-    sml_output_path = os.path.join(output_dir, f"{book_id}.sml.txt")
+    e2a_sml_path = os.path.join(output_dir, f"{book_id}.e2a.sml.txt")
+    portable_assignments = portable_voice_assignments(voice_assignments, args.library_root)
     generate_sml_output(
-        booknlp_data, characters, sml_output_path, voice_assignments
+        booknlp_data, characters, e2a_sml_path, portable_assignments, use_macros=False
     )
-    progress(f"SML output written to: {sml_output_path}", 90)
-
-    # Step 6: Generate characters JSON
-    char_json_path = os.path.join(output_dir, f"{book_id}.characters.json")
-    generate_characters_json(characters, char_json_path, voice_assignments)
-    progress(f"Characters JSON written to: {char_json_path}", 95)
+    progress(f"E2A-ready SML written to: {e2a_sml_path}", 92)
 
     progress("Done!", 100)
 
-    print(f"\n=== Output Files ===")
-    print(f"  SML text:        {sml_output_path}")
-    print(f"  Characters JSON: {char_json_path}")
+    print(f"\nE2A-ready SML: {e2a_sml_path}")
     if voice_assignments:
         print(f"\n  Voice assignments are embedded in the SML output.")
-        print(f"  Use the SML file with ebook2audiobook for multi-speaker audiobook generation.")
+        print(f"  Give {e2a_sml_path} to ebook2audiobook for multi-speaker audiobook generation.")
     else:
-        print(f"\n  No voices were matched from {args.e2a_path}.")
+        print(f"\n  No voices were matched from {args.library_root}.")
         print(f"  Check that voices/{args.language}/ contains voice files.")
 
 
-def _launch_gui(args):
+def _launch_gui(args:argparse.Namespace)->None:
     """Launch the web GUI."""
     try:
         import gradio as gr
         from web_gui import create_app
 
-        app = create_app(default_e2a_path=args.e2a_path or "")
+        app = create_app(default_library_root=args.library_root)
         app.launch(
             server_name=args.host,
             server_port=args.port,
             share=args.share,
-            theme=gr.themes.Soft(),
         )
     except ImportError as e:
         print(f"Error: Could not launch GUI. Make sure gradio is installed: {e}")
-        print("  pip install gradio")
+        print("  uv pip install gradio")
         sys.exit(1)
 
 
