@@ -34,7 +34,7 @@ Examples:
   python cli.py input_book.txt
 
   # With custom output directory
-  python cli.py input_book.txt --library-root ~/ebook2audiobook -o output/
+  python cli.py input_book.txt -o output/
 
   # Process an epub file (requires Calibre)
   python cli.py mybook.epub
@@ -63,13 +63,6 @@ Examples:
         choices=["small", "big"],
         default="big",
         help="BookNLP model size (default: big)",
-    )
-    parser.add_argument(
-        "--library-root", "--e2a-path",
-        dest="library_root",
-        default=str(configured_library_root()),
-        help="Folder containing voices/ and models/ (default: this tool's data/ folder). "
-        "--e2a-path remains an alias for an existing E2A checkout.",
     )
     parser.add_argument(
         "--voices-dir",
@@ -112,10 +105,8 @@ Examples:
 
     args = parser.parse_args()
 
-    # Expand ~ in all path arguments
-    args.library_root = os.path.expanduser(args.library_root)
-    if not args.library_root.strip():
-        parser.error("--library-root must not be empty")
+    # Voice files and BookNLP models live in this tool's own data directory.
+    args.library_root = str(configured_library_root())
     if args.output_dir:
         args.output_dir = os.path.expanduser(args.output_dir)
     if args.voices_dir:
@@ -186,7 +177,7 @@ def _run_headless(args:argparse.Namespace)->None:
         progress(f"Text file: {txt_file}", 5)
 
         booknlp_dir = os.path.join(output_dir, "booknlp")
-        result = run_booknlp(txt_file, booknlp_dir, args.model, progress, e2a_path=args.library_root)
+        result = run_booknlp(txt_file, booknlp_dir, args.model, progress, data_root=args.library_root)
         book_id = result["book_id"]
 
     # Step 2: Load BookNLP data
@@ -206,7 +197,7 @@ def _run_headless(args:argparse.Namespace)->None:
         print(f"  {i + 1}. {name} (gender: {gender}, age: {age})")
     print()
 
-    # Step 4: Auto-assign voices from the selected voice library
+    # Step 4: Auto-assign voices from this tool's voice library
     voice_assignments = {}
     progress("Scanning voice library...", 75)
     voice_library = scan_voice_library(args.library_root, args.language)
@@ -252,7 +243,7 @@ def _launch_gui(args:argparse.Namespace)->None:
         import gradio as gr
         from web_gui import create_app
 
-        app = create_app(default_library_root=args.library_root)
+        app = create_app()
         app.launch(
             server_name=args.host,
             server_port=args.port,

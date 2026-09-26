@@ -9,10 +9,10 @@ from pathlib import Path
 from typing import Callable
 
 
-def configure_booknlp_cache(e2a_path:str|Path|None=None)->Path:
+def configure_booknlp_cache(data_root:str|Path|None=None)->Path:
     '''Configure the Hugging Face cache before its first import.'''
-    if e2a_path:
-        repo_dir = Path(e2a_path).expanduser().resolve()
+    if data_root:
+        repo_dir = Path(data_root).expanduser().resolve()
     else:
         from .voice_library import configured_library_root
         repo_dir = configured_library_root()
@@ -129,7 +129,7 @@ def run_booknlp(
     output_dir:str,
     model:str='small',
     progress_callback:Callable[[str,int],None]|None=None,
-    e2a_path:str|Path|None=None,
+    data_root:str|Path|None=None,
 )->dict[str,str]:
     """Run BookNLP pipeline on a text file and return extracted data.
 
@@ -138,7 +138,7 @@ def run_booknlp(
         output_dir: Directory for BookNLP output files.
         model: BookNLP model size ('small' or 'big').
         progress_callback: Optional callable(message, pct) for progress updates.
-        e2a_path: Voice-library root for the model cache.
+        data_root: This tool's data directory for the model cache.
 
     Returns:
         Dict with keys: 'book_id', 'output_dir', 'characters', 'tokens_file',
@@ -147,7 +147,7 @@ def run_booknlp(
     Raises:
         RuntimeError: If BookNLP or its dependencies are not properly installed.
     """
-    model_dir = configure_booknlp_cache(e2a_path)
+    model_dir = configure_booknlp_cache(data_root)
     # Pre-check installation before attempting import
     ok, msg = check_booknlp_installation()
     if not ok:

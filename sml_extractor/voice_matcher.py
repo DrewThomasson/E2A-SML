@@ -14,11 +14,11 @@ AGE_CATEGORIES = {"child", "teen", "adult", "elder"}
 GENDERS = {"male", "female"}
 
 
-def scan_voice_library(ebook2audiobook_path: str, language: str = "eng") -> dict:
-    """Scan the ebook2audiobook voice library and return available voices.
+def scan_voice_library(library_root: str, language: str = "eng") -> dict:
+    """Scan this tool's voice library and return available voices.
 
     Args:
-        ebook2audiobook_path: Path to the ebook2audiobook repository root.
+        library_root: Directory containing voices/.
         language: Language code (default: 'eng').
 
     Returns:
@@ -30,7 +30,7 @@ def scan_voice_library(ebook2audiobook_path: str, language: str = "eng") -> dict
             "elder": {"male": [...], "female": [...]},
         }
     """
-    voices_dir = os.path.join(ebook2audiobook_path, "voices", language)
+    voices_dir = os.path.join(library_root, "voices", language)
     library = {}
 
     if not os.path.isdir(voices_dir):

@@ -29,7 +29,7 @@ uv pip install "$(python -m spacy info en_core_web_sm --url)"
 python cli.py --gui
 ```
 
-On Windows, activate with `.venv\Scripts\activate` instead. Native runs also download voices into `data/voices/` when needed and store BookNLP models in `data/models/`. To use an existing E2A voice library instead, select the E2A checkout in the GUI or pass `--library-root /path/to/ebook2audiobook` on the CLI. Install [Calibre](https://calibre-ebook.com/download) to read formats other than `.txt` locally.
+On Windows, activate with `.venv\Scripts\activate` instead. Native runs download voices into `data/voices/` when needed and store BookNLP models in `data/models/`. Neither the GUI nor CLI needs an Ebook2audiobook path. Install [Calibre](https://calibre-ebook.com/download) to read formats other than `.txt` locally.
 
 ## Make an audiobook with E2A
 

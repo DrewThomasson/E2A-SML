@@ -72,6 +72,6 @@ def ensure_voice_library(
 
 
 def configured_library_root()->Path:
-    """Return this tool's data directory, or an explicitly selected voice root."""
-    configured = os.environ.get('SML_DATA_DIR') or os.environ.get('E2A_PATH')
+    """Return this tool's data directory, optionally relocated for Docker."""
+    configured = os.environ.get('SML_DATA_DIR')
     return Path(configured).expanduser().resolve() if configured else DEFAULT_DATA_DIR
