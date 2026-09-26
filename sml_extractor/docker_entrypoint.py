@@ -5,17 +5,17 @@ from __future__ import annotations
 import os
 import sys
 
-from .voice_library import DEFAULT_REPO_ID, configured_e2a_path, ensure_voice_library
+from .voice_library import DEFAULT_REPO_ID, configured_library_root, ensure_voice_library
 from .core import configure_booknlp_cache
 
 
 def main()->None:
-    configure_booknlp_cache(configured_e2a_path())
+    configure_booknlp_cache(configured_library_root())
     repo_id = os.environ.get("E2A_VOICES_REPO_ID", DEFAULT_REPO_ID)
     try:
-        ensure_voice_library(configured_e2a_path(), repo_id=repo_id)
+        ensure_voice_library(configured_library_root(), repo_id=repo_id)
     except Exception as exc:
-        print(f"Unable to prepare the ebook2audiobook voice library: {exc}", file=sys.stderr)
+        print(f"Unable to prepare the voice library: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc
 
     os.execvp(

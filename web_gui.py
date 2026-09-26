@@ -6,7 +6,7 @@ import tempfile
 
 from sml_extractor.core import configure_booknlp_cache
 if 'HF_HOME' not in os.environ:
-    configure_booknlp_cache(os.environ.get('E2A_PATH'))
+    configure_booknlp_cache()
 import gradio as gr
 
 from sml_extractor.core import (
@@ -17,6 +17,7 @@ from sml_extractor.core import (
     run_booknlp,
 )
 from sml_extractor.sml_generator import generate_sml_output, portable_voice_assignments
+from sml_extractor.voice_library import configured_library_root, ensure_voice_library
 from sml_extractor.voice_matcher import (
     auto_assign_voices,
     get_voice_category_info,
@@ -56,31 +57,18 @@ def _voice_display_label(voice_path: str) -> str:
 def process_book(
     input_file:str|None,
     model_size:str,
-    e2a_path:str,
+    library_root:str,
     progress:gr.Progress=gr.Progress(),
 )->tuple[object,...]:
     """Process a book file through BookNLP and extract characters."""
     if input_file is None:
         raise gr.Error("Please upload a book file.")
 
-    # Validate ebook2audiobook path
-    if not e2a_path or not e2a_path.strip():
-        raise gr.Error(
-            "Please provide the path to your ebook2audiobook folder.\n"
-            "This is required for voice auto-assignment."
-        )
-
-    e2a_path = os.path.expanduser(e2a_path.strip())
-
-    if not os.path.isdir(e2a_path):
-        raise gr.Error(f"ebook2audiobook folder not found: {e2a_path}")
-
-    voices_dir = os.path.join(e2a_path, "voices")
-    if not os.path.isdir(voices_dir):
-        raise gr.Error(
-            f"No 'voices/' directory found in {e2a_path}.\n"
-            "Make sure this is the ebook2audiobook repository root."
-        )
+    library_root = os.path.expanduser((library_root or '').strip() or str(configured_library_root()))
+    try:
+        ensure_voice_library(library_root)
+    except Exception as exc:
+        raise gr.Error(f"Unable to prepare the voice library: {exc}") from exc
 
     progress(0.05, desc="Preparing...")
 
@@ -108,7 +96,7 @@ def process_book(
     progress(0.15, desc=f"Running BookNLP ({model_size} model)... This may take a while.")
 
     try:
-        result = run_booknlp(txt_path, booknlp_dir, model_size, e2a_path=e2a_path)
+        result = run_booknlp(txt_path, booknlp_dir, model_size, e2a_path=library_root)
     except Exception as e:
         raise gr.Error(f"BookNLP processing failed: {e}")
 
@@ -128,10 +116,10 @@ def process_book(
 
     progress(0.7, desc="Scanning voice library...")
 
-    # Scan voice library from ebook2audiobook
-    voice_library = scan_voice_library(e2a_path)
+    # Scan the selected voice library
+    voice_library = scan_voice_library(library_root)
     _session_state["voice_library"] = voice_library
-    _session_state["e2a_path"] = e2a_path
+    _session_state["library_root"] = library_root
 
     # Auto-assign voices based on each character's inferred gender and age
     voice_assignments = {}
@@ -285,7 +273,7 @@ def generate_output(progress:gr.Progress=gr.Progress())->tuple[str,str,str]:
 
     # Generate path-based SML with portable voice-library paths
     e2a_sml_path = os.path.join(output_dir, f"{book_id}.e2a.sml.txt")
-    portable_assignments = portable_voice_assignments(voice_assignments, _session_state["e2a_path"])
+    portable_assignments = portable_voice_assignments(voice_assignments, _session_state["library_root"])
     generate_sml_output(booknlp_data, characters, e2a_sml_path, portable_assignments, use_macros=False)
 
     progress(0.9, desc="Preparing download...")
@@ -305,16 +293,14 @@ def generate_output(progress:gr.Progress=gr.Progress())->tuple[str,str,str]:
     )
 
 
-def create_app(default_e2a_path:str='')->gr.Blocks:
-    if not default_e2a_path:
-        default_e2a_path = os.environ.get('E2A_PATH') or os.path.abspath(
-            os.path.join(os.path.dirname(__file__), '..', '..')
-        )
+def create_app(default_library_root:str='')->gr.Blocks:
+    if not default_library_root:
+        default_library_root = str(configured_library_root())
     
     """Create the Gradio web interface.
 
     Args:
-        default_e2a_path: Default value for the ebook2audiobook path field.
+        default_library_root: Default folder for voices and BookNLP models.
     """
 
     with gr.Blocks(
@@ -336,7 +322,7 @@ def create_app(default_e2a_path:str='')->gr.Blocks:
             ### How it works:
             1. **Upload** a book file (.txt, .epub, .mobi, etc.)
             2. **Analyze** - BookNLP identifies characters, dialog, and narration
-            3. **Assign voices** - Auto-assign from ebook2audiobook library
+            3. **Assign voices** - Auto-assign from the selected voice library
             4. **Generate** - Download SML output ready for ebook2audiobook
             """
         )
@@ -356,11 +342,11 @@ def create_app(default_e2a_path:str='')->gr.Blocks:
                         label="🧠 BookNLP Model",
                         info="'big' is more accurate but slower and requires more RAM/GPU",
                     )
-                    e2a_path = gr.Textbox(
-                        label="📂 ebook2audiobook Path",
-                        placeholder="/path/to/ebook2audiobook",
-                        value=default_e2a_path,
-                        info="Full path to your local ebook2audiobook folder (auto-detected by default)",
+                    library_root = gr.Textbox(
+                        label="📂 Voice Library Folder",
+                        placeholder="/path/to/voice-library-data",
+                        value=default_library_root,
+                        info="Stores voices and BookNLP models here; an E2A checkout can be used instead",
                     )
 
             process_btn = gr.Button("🔍 Analyze Book", variant="primary", size="lg")
@@ -370,7 +356,7 @@ def create_app(default_e2a_path:str='')->gr.Blocks:
             gr.Markdown(
                 "After analyzing a book, all detected characters are listed below with their "
                 "**inferred gender** and **age category** from BookNLP. Voices are auto-assigned "
-                "from the ebook2audiobook voice library. Select any character to change its voice."
+                "from the selected voice library. Select any character to change its voice."
             )
 
             char_table = gr.Dataframe(
@@ -396,7 +382,7 @@ def create_app(default_e2a_path:str='')->gr.Blocks:
                             label="Select Voice",
                             choices=[],
                             interactive=True,
-                            info="Pick a voice from the ebook2audiobook library",
+                            info="Pick a voice from the selected library",
                         )
                         assign_btn = gr.Button("🎤 Assign Selected Voice", variant="primary")
                         assign_status = gr.Textbox(label="Status", interactive=False)
@@ -429,7 +415,7 @@ def create_app(default_e2a_path:str='')->gr.Blocks:
         # Process book → populate character table, dropdowns, and preview
         process_btn.click(
             fn=process_book,
-            inputs=[input_file, model_size, e2a_path],
+            inputs=[input_file, model_size, library_root],
             outputs=[
                 status_output,
                 char_table,

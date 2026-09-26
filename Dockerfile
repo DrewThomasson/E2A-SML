@@ -19,7 +19,7 @@ RUN uv pip install --system --no-cache "$(python -m spacy info en_core_web_sm --
 COPY . .
 
 # Standalone storage for voices and BookNLP models
-ENV E2A_PATH=/app/data
+ENV SML_DATA_DIR=/app/data
 RUN mkdir -p /app/data
 
 # Expose Gradio default port

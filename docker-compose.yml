@@ -4,7 +4,7 @@ services:
     ports:
       - "7861:7861"
     environment:
-      E2A_PATH: /app/data
+      SML_DATA_DIR: /app/data
     volumes:
       # Persist the standalone voice library and BookNLP models.
       - ./data:/app/data

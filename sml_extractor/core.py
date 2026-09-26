@@ -11,7 +11,11 @@ from typing import Callable
 
 def configure_booknlp_cache(e2a_path:str|Path|None=None)->Path:
     '''Configure the Hugging Face cache before its first import.'''
-    repo_dir = Path(e2a_path).expanduser().resolve() if e2a_path else Path(__file__).resolve().parents[3]
+    if e2a_path:
+        repo_dir = Path(e2a_path).expanduser().resolve()
+    else:
+        from .voice_library import configured_library_root
+        repo_dir = configured_library_root()
     model_dir = repo_dir / 'models' / 'booknlp_models'
     os.environ['HF_HOME'] = str(model_dir / 'huggingface')
     return model_dir
@@ -134,7 +138,7 @@ def run_booknlp(
         output_dir: Directory for BookNLP output files.
         model: BookNLP model size ('small' or 'big').
         progress_callback: Optional callable(message, pct) for progress updates.
-        e2a_path: ebook2audiobook repository root for the model cache.
+        e2a_path: Voice-library root for the model cache.
 
     Returns:
         Dict with keys: 'book_id', 'output_dir', 'characters', 'tokens_file',

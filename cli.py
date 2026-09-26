@@ -15,6 +15,7 @@ from sml_extractor.core import (
     run_booknlp,
 )
 from sml_extractor.sml_generator import generate_sml_output, portable_voice_assignments
+from sml_extractor.voice_library import configured_library_root, ensure_voice_library
 from sml_extractor.voice_matcher import (
     auto_assign_voices,
     get_voice_display_name,
@@ -30,16 +31,16 @@ def main()->None:
         epilog="""
 Examples:
   # Basic usage - process a book and generate SML output
-  python cli.py input_book.txt --e2a-path /path/to/ebook2audiobook
+  python cli.py input_book.txt
 
   # With custom output directory
-  python cli.py input_book.txt --e2a-path ~/ebook2audiobook -o output/
+  python cli.py input_book.txt --library-root ~/ebook2audiobook -o output/
 
   # Process an epub file (requires Calibre)
-  python cli.py mybook.epub --e2a-path ~/ebook2audiobook
+  python cli.py mybook.epub
 
   # Use pre-existing BookNLP output
-  python cli.py --booknlp-dir existing_output/ --book-id mybook --e2a-path ~/ebook2audiobook -o sml_output/
+  python cli.py --booknlp-dir existing_output/ --book-id mybook -o sml_output/
 
   # Launch web GUI instead
   python cli.py --gui
@@ -63,15 +64,12 @@ Examples:
         default="big",
         help="BookNLP model size (default: big)",
     )
-    default_e2a_path = os.environ.get('E2A_PATH') or os.path.abspath(
-        os.path.join(os.path.dirname(__file__), '..', '..')
-    )
-
     parser.add_argument(
-        "--e2a-path",
-        default=default_e2a_path,
-        help="Path to ebook2audiobook repository (required for voice assignment). "
-        "Defaults to the parent directory of this tool.",
+        "--library-root", "--e2a-path",
+        dest="library_root",
+        default=str(configured_library_root()),
+        help="Folder containing voices/ and models/ (default: this tool's data/ folder). "
+        "--e2a-path remains an alias for an existing E2A checkout.",
     )
     parser.add_argument(
         "--voices-dir",
@@ -115,8 +113,9 @@ Examples:
     args = parser.parse_args()
 
     # Expand ~ in all path arguments
-    if args.e2a_path:
-        args.e2a_path = os.path.expanduser(args.e2a_path)
+    args.library_root = os.path.expanduser(args.library_root)
+    if not args.library_root.strip():
+        parser.error("--library-root must not be empty")
     if args.output_dir:
         args.output_dir = os.path.expanduser(args.output_dir)
     if args.voices_dir:
@@ -125,7 +124,7 @@ Examples:
         args.booknlp_dir = os.path.expanduser(args.booknlp_dir)
     if args.input_file:
         args.input_file = os.path.expanduser(args.input_file)
-    configure_booknlp_cache(args.e2a_path)
+    configure_booknlp_cache(args.library_root)
     if args.gui:
         _launch_gui(args)
         return
@@ -135,15 +134,10 @@ Examples:
 
 
 
-    if not os.path.isdir(args.e2a_path):
-        parser.error(f"ebook2audiobook path not found: {args.e2a_path}")
-
-    voices_dir = os.path.join(args.e2a_path, "voices")
-    if not os.path.isdir(voices_dir):
-        parser.error(
-            f"No 'voices/' directory found in {args.e2a_path}. "
-            "Make sure this is the ebook2audiobook repository root."
-        )
+    try:
+        ensure_voice_library(args.library_root)
+    except Exception as exc:
+        parser.error(f"Unable to prepare the voice library: {exc}")
 
     _run_headless(args)
 
@@ -192,7 +186,7 @@ def _run_headless(args:argparse.Namespace)->None:
         progress(f"Text file: {txt_file}", 5)
 
         booknlp_dir = os.path.join(output_dir, "booknlp")
-        result = run_booknlp(txt_file, booknlp_dir, args.model, progress, e2a_path=args.e2a_path)
+        result = run_booknlp(txt_file, booknlp_dir, args.model, progress, e2a_path=args.library_root)
         book_id = result["book_id"]
 
     # Step 2: Load BookNLP data
@@ -212,10 +206,10 @@ def _run_headless(args:argparse.Namespace)->None:
         print(f"  {i + 1}. {name} (gender: {gender}, age: {age})")
     print()
 
-    # Step 4: Auto-assign voices from ebook2audiobook voice library
+    # Step 4: Auto-assign voices from the selected voice library
     voice_assignments = {}
-    progress("Scanning ebook2audiobook voice library...", 75)
-    voice_library = scan_voice_library(args.e2a_path, args.language)
+    progress("Scanning voice library...", 75)
+    voice_library = scan_voice_library(args.library_root, args.language)
     custom_voices = (
         scan_custom_voices(args.voices_dir) if args.voices_dir else None
     )
@@ -235,7 +229,7 @@ def _run_headless(args:argparse.Namespace)->None:
         sys.exit(1)
 
     e2a_sml_path = os.path.join(output_dir, f"{book_id}.e2a.sml.txt")
-    portable_assignments = portable_voice_assignments(voice_assignments, args.e2a_path)
+    portable_assignments = portable_voice_assignments(voice_assignments, args.library_root)
     generate_sml_output(
         booknlp_data, characters, e2a_sml_path, portable_assignments, use_macros=False
     )
@@ -248,7 +242,7 @@ def _run_headless(args:argparse.Namespace)->None:
         print(f"\n  Voice assignments are embedded in the SML output.")
         print(f"  Give {e2a_sml_path} to ebook2audiobook for multi-speaker audiobook generation.")
     else:
-        print(f"\n  No voices were matched from {args.e2a_path}.")
+        print(f"\n  No voices were matched from {args.library_root}.")
         print(f"  Check that voices/{args.language}/ contains voice files.")
 
 
@@ -258,7 +252,7 @@ def _launch_gui(args:argparse.Namespace)->None:
         import gradio as gr
         from web_gui import create_app
 
-        app = create_app(default_e2a_path=args.e2a_path or "")
+        app = create_app(default_library_root=args.library_root)
         app.launch(
             server_name=args.host,
             server_port=args.port,

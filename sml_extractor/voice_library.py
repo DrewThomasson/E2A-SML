@@ -1,4 +1,4 @@
-"""Download and safely install the shared ebook2audiobook voice library."""
+"""Download and safely install the voice library."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from pathlib import Path
 
 DEFAULT_REPO_ID = "ebook2audiobook/E2A-Voices"
 DEFAULT_FILENAME = "voices.zip"
+DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 
 def has_voices(voices_dir: Path) -> bool:
@@ -34,23 +35,23 @@ def _safe_extract(archive: Path, destination: Path) -> None:
 
 
 def ensure_voice_library(
-    e2a_path: str | Path,
+    library_root: str | Path,
     repo_id: str = DEFAULT_REPO_ID,
     filename: str = DEFAULT_FILENAME,
 ) -> bool:
-    """Install the Hub voice archive if ``e2a_path/voices`` is empty.
+    """Install the Hub voice archive if ``library_root/voices`` is empty.
 
     Returns ``True`` when a download was performed and ``False`` when an
     existing voice library was reused.
     """
-    e2a_path = Path(e2a_path).expanduser().resolve()
-    voices_dir = e2a_path / "voices"
+    library_root = Path(library_root).expanduser().resolve()
+    voices_dir = library_root / "voices"
     if has_voices(voices_dir):
         return False
 
     from huggingface_hub import hf_hub_download
 
-    e2a_path.mkdir(parents=True, exist_ok=True)
+    library_root.mkdir(parents=True, exist_ok=True)
     print(f"No voices found in {voices_dir}; downloading {repo_id}/{filename}...")
     archive = Path(
         hf_hub_download(repo_id=repo_id, filename=filename, repo_type="dataset")
@@ -70,6 +71,7 @@ def ensure_voice_library(
     return True
 
 
-def configured_e2a_path()->Path:
-    """Return the standalone data directory used by the Docker image."""
-    return Path(os.environ.get('E2A_PATH', '/app/data'))
+def configured_library_root()->Path:
+    """Return this tool's data directory, or an explicitly selected voice root."""
+    configured = os.environ.get('SML_DATA_DIR') or os.environ.get('E2A_PATH')
+    return Path(configured).expanduser().resolve() if configured else DEFAULT_DATA_DIR
