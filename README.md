@@ -1,226 +1,52 @@
-> [!IMPORTANT]
-> This repo is depricated Future updates of E2A-SML can be found [here](https://github.com/DrewThomasson/ebook2audiobook/tree/main/components/E2A-SML/) in [Ebook2audiobook](https://github.com/DrewThomasson/ebook2audiobook/tree/main/components/E2A-SML/)
+# E2A-SML: character voices for ebook2audiobook
 
-# 📚 SML Book Dialog Extractor
+E2A-SML uses BookNLP to find dialogue and speakers in an **English** book, lets you assign voices, and creates an SML text file for [ebook2audiobook](https://github.com/DrewThomasson/ebook2audiobook). It runs separately from E2A.
 
-Uses [BookNLP](https://github.com/DrewThomasson/booknlp) to analyze books, extract character dialog, and generate **SML-formatted output** for multi-speaker audiobook generation with [ebook2audiobook](https://github.com/DrewThomasson/ebook2audiobook).
+![E2A-SML web GUI showing book upload and analysis options](assets/web_gui.png)
 
-## ✨ Features
+## Quick start with Docker
 
-- **Automatic character detection** — identifies characters, their gender, and age category
-- **Dialog attribution** — determines who speaks each line of dialog
-- **SML output** — generates `[voice:]...[/voice]` tagged text compatible with ebook2audiobook
-- **Voice auto-assignment** — matches characters to appropriate voices from the ebook2audiobook voice library based on gender and age
-- **Web GUI** — Gradio-based web interface for easy voice assignment and preview
-- **Headless CLI** — full command-line interface for batch/automated processing
-- **Docker support** — fully containerized with all dependencies pre-installed
-- **Multiple formats** — supports .txt, .epub, .mobi, .pdf, .html, .fb2, .azw, .azw3 (non-txt requires [Calibre](https://calibre-ebook.com/download))
-
-## 🐳 Docker (Recommended)
-
-The easiest way to run the tool — all dependencies (BookNLP, spaCy, Calibre, Gradio) are pre-installed.
-
-### Quick Start with Docker Compose
+Clone this repo into an E2A checkout, or clone it elsewhere if you prefer:
 
 ```bash
-# 1. Clone this repo
+cd /path/to/ebook2audiobook/components
 git clone https://github.com/DrewThomasson/E2A-SML.git
 cd E2A-SML
-
-# 2. Edit docker-compose.yml to point to your local ebook2audiobook folder
-#    (default: ~/ebook2audiobook)
-
-# 3. Build and run
 docker compose up --build
 ```
 
-Open http://localhost:7860 in your browser. The ebook2audiobook path is pre-filled as `/ebook2audiobook`.
+Open **http://localhost:7861**. The first start downloads the voice library into `data/`; later starts reuse it. The Docker container has its own voices and BookNLP models. The GUI lets you download the finished SML file from your browser.
 
-### Docker CLI
+## Local installation
 
-```bash
-# Build the image
-docker build -t sml-extractor .
-
-# Run the web GUI (mount your ebook2audiobook folder)
-docker run -p 7860:7860 -v ~/ebook2audiobook:/ebook2audiobook sml-extractor
-
-# Run headless mode
-docker run -v ~/ebook2audiobook:/ebook2audiobook -v ./output:/app/output \
-  -v ./mybook.txt:/app/mybook.txt \
-  sml-extractor python cli.py /app/mybook.txt --e2a-path /ebook2audiobook -o /app/output
-```
-
-## 🚀 Local Installation
-
-### Installation
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and use a separate Python 3.10 environment:
 
 ```bash
-git clone https://github.com/DrewThomasson/E2A-SML.git
-cd E2A-SML
-pip install -r requirements.txt
-python -m spacy download en_core_web_sm
+cd /path/to/ebook2audiobook/components/E2A-SML
+uv venv --python 3.10 .venv
+source .venv/bin/activate
+uv pip install -r requirements.txt
+uv pip install "$(python -m spacy info en_core_web_sm --url)"
+python cli.py --gui
 ```
 
-### Web GUI
+On Windows, activate with `.venv\Scripts\activate` instead. When cloned into E2A's `components/` folder, the GUI finds the E2A voice library automatically. If cloned elsewhere, enter your E2A checkout path in the GUI. Install [Calibre](https://calibre-ebook.com/download) to read formats other than `.txt` locally.
+
+## Make an audiobook with E2A
+
+1. In **Process Book**, upload an English book and select **Analyze Book**.
+2. In **Characters & Voices**, review or change the assigned voices.
+3. In **Preview & Generate**, select **Generate SML Output** and download the **E2A-ready SML** file named `<book>.e2a.sml.txt`.
+4. Give that file to E2A as the book input. Its `voices/...` paths must refer to files in E2A's voice library. Run native E2A from its repository root; if you use separate containers, copy or mount the matching voices into E2A.
+
+E2A-SML produces one SML file for E2A. Its voice tags use paths to the assigned voice files.
+
+## Command line
+
+With the local environment activated, run from the E2A-SML folder:
 
 ```bash
-python cli.py --gui --e2a-path /path/to/ebook2audiobook
+python cli.py /path/to/book.txt --e2a-path /path/to/ebook2audiobook -o output/
 ```
 
-Opens a browser-based interface where you can:
-1. Upload a book file
-2. View detected characters with their gender/age
-3. Assign voices (auto or manual)
-4. Generate and download SML output
-
-### Command Line (Headless)
-
-```bash
-# Basic - analyze a book and generate SML output
-python cli.py mybook.txt --e2a-path /path/to/ebook2audiobook
-
-# With custom output directory
-python cli.py mybook.txt --e2a-path ~/ebook2audiobook -o output/
-
-# Process an epub (requires Calibre)
-python cli.py mybook.epub --e2a-path ~/ebook2audiobook
-
-# Use the more accurate (but slower) BookNLP model
-python cli.py mybook.txt --e2a-path ~/ebook2audiobook --model big
-
-# Use pre-existing BookNLP output
-python cli.py --booknlp-dir existing_output/ --book-id mybook --e2a-path ~/ebook2audiobook -o sml_output/
-```
-
-## 📖 How It Works
-
-### Pipeline
-
-```
-Input Book → [BookNLP Analysis] → Character Detection → Dialog Attribution
-                                                            ↓
-                                              Voice Assignment (auto/manual)
-                                                            ↓
-                                              SML Output + Characters JSON
-```
-
-### Step 1: BookNLP Analysis
-
-BookNLP processes the book text and produces:
-- **Entity detection** — identifies characters, locations, organizations
-- **Coreference resolution** — clusters references (e.g., "Tom", "Tom Sawyer", "Mr. Sawyer" → same person)
-- **Quote attribution** — determines who speaks each quoted passage
-- **Gender inference** — infers character gender from pronoun usage
-- **Age inference** — estimates age category from context clues
-
-### Step 2: SML Generation
-
-The tool converts BookNLP's tagged output into SML format:
-
-**BookNLP format** (`book.txt`):
-```
-[Narrator] It was a bright cold day in April, and the clocks were striking thirteen. [/]
-[Winston] "Freedom is the freedom to say that two plus two make four." [/]
-[OBrien] "How many fingers am I holding up, Winston?" [/]
-```
-
-**SML output** (for ebook2audiobook):
-```
-[voice:/path/to/narrator_voice.wav]
-It was a bright cold day in April, and the clocks were striking thirteen.
-[/voice]
-[voice:/path/to/winston_voice.wav]
-"Freedom is the freedom to say that two plus two make four."
-[/voice]
-[voice:/path/to/obrien_voice.wav]
-"How many fingers am I holding up, Winston?"
-[/voice]
-```
-
-### Step 3: Voice Assignment
-
-When given the path to an ebook2audiobook installation, voices are automatically matched:
-
-| Character Property | Voice Directory |
-|---|---|
-| adult + female | `voices/eng/adult/female/` |
-| adult + male | `voices/eng/adult/male/` |
-| teen + female | `voices/eng/teen/female/` |
-| teen + male | `voices/eng/teen/male/` |
-| child + female | `voices/eng/child/female/` |
-| child + male | `voices/eng/child/male/` |
-| elder + female | `voices/eng/elder/female/` |
-| elder + male | `voices/eng/elder/male/` |
-
-## 📁 Output Files
-
-| File | Description |
-|---|---|
-| `{book_id}.sml.txt` | SML-tagged text with `[voice:]...[/voice]` tags |
-| `{book_id}.characters.json` | Character metadata with voice assignments |
-
-### characters.json format
-
-```json
-{
-  "characters": [
-    {
-      "normalized_name": "Narrator",
-      "inferred_gender": "unknown",
-      "inferred_age_category": "unknown",
-      "tts_engine": "XTTSv2",
-      "language": "eng",
-      "voice": "/path/to/voice.wav"
-    },
-    {
-      "normalized_name": "Winston",
-      "inferred_gender": "male",
-      "inferred_age_category": "adult",
-      "tts_engine": "XTTSv2",
-      "language": "eng",
-      "voice": "/path/to/male_voice.wav"
-    }
-  ]
-}
-```
-
-## 🖥️ CLI Reference
-
-```
-usage: cli.py [-h] [-o OUTPUT_DIR] [--model {small,big}] [--e2a-path E2A_PATH]
-              [--voices-dir VOICES_DIR] [--language LANGUAGE]
-              [--booknlp-dir BOOKNLP_DIR] [--book-id BOOK_ID]
-              [--gui] [--host HOST] [--port PORT] [--share]
-              [input_file]
-
-Options:
-  input_file              Input book file (.txt, .epub, .mobi, .pdf, etc.)
-  -o, --output-dir        Output directory (default: output/)
-  --model {small,big}     BookNLP model size (default: small)
-  --e2a-path              Path to ebook2audiobook repo for voice auto-assignment
-  --voices-dir            Path to custom voice files directory
-  --language              Language code for voice selection (default: eng)
-  --booknlp-dir           Use existing BookNLP output directory
-  --book-id               Book ID for loading existing BookNLP output
-  --gui                   Launch web GUI
-  --host                  Web GUI host (default: 127.0.0.1)
-  --port                  Web GUI port (default: 7860)
-  --share                 Create public Gradio share link
-```
-
-## 🔧 Requirements
-
-### Docker (recommended)
-- [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/)
-- [ebook2audiobook](https://github.com/DrewThomasson/ebook2audiobook) cloned locally (for the voice library)
-
-### Local installation
-- Python 3.10+
-- [BookNLP-plus](https://github.com/DrewThomasson/booknlp) (installed via requirements.txt)
-- [Calibre](https://calibre-ebook.com/download) (optional, for non-txt ebook formats)
-- [ebook2audiobook](https://github.com/DrewThomasson/ebook2audiobook) (required, for voice library)
-
-## 📄 License
-
-MIT
+Use `python cli.py --help` for model size, custom voice folders, and other options. Book analysis supports English only; `--language` changes the voice-library language, not BookNLP's analysis language. For non-`.txt` books, install Calibre locally or use Docker.
