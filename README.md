@@ -2,10 +2,6 @@
 
 E2A-SML uses BookNLP to find dialogue and speakers in an **English** book, lets you assign voices, and creates an SML text file for [ebook2audiobook](https://github.com/DrewThomasson/ebook2audiobook). It runs separately from E2A.
 
-[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/DrewThomasson/E2A-SML/blob/main/Notebooks/colab_e2a_sml.ipynb)
-
-The notebook opens the web GUI in one run and includes an optional CLI cell. Free Colab web UI sessions may end early.
-
 ![E2A-SML web GUI showing book upload and analysis options](assets/web_gui.png)
 
 ## Quick start with Docker
