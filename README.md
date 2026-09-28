@@ -29,7 +29,7 @@ uv pip install "$(python -m spacy info en_core_web_sm --url)"
 python cli.py --gui
 ```
 
-On Windows, activate with `.venv\Scripts\activate` instead. Native runs download voices into `data/voices/` when needed and store BookNLP models in `data/models/`. Neither the GUI nor CLI needs an Ebook2audiobook path. Install [Calibre](https://calibre-ebook.com/download) to read formats other than `.txt` locally.
+On Windows PowerShell, activate with `.venv\Scripts\Activate.ps1` and install the spaCy model with `uv pip install (python -m spacy info en_core_web_sm --url)`. Native runs download voices into `data/voices/` when needed and store BookNLP models in `data/models/`. Neither the GUI nor CLI needs an Ebook2audiobook path. Install [Calibre](https://calibre-ebook.com/download) to read formats other than `.txt` locally, and make sure `ebook-convert` is on your PATH.
 
 ## Make an audiobook with E2A
 
