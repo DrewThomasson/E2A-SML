@@ -17,6 +17,7 @@ RUN uv pip install --system --no-cache "$(python -m spacy info en_core_web_sm --
 
 # Copy application code
 COPY . .
+RUN python -c "from sml_extractor.core import check_booknlp_installation; ok, message = check_booknlp_installation(); assert ok, message"
 
 # Standalone storage for voices and BookNLP models
 ENV SML_DATA_DIR=/app/data

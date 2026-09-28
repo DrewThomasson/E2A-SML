@@ -31,13 +31,30 @@ def check_booknlp_installation()->tuple[bool,str]:
 
     # Check booknlp package
     try:
-        import booknlp  # noqa: F401
+        import booknlp.english
     except ImportError:
         errors.append(
             "BookNLP local module is not found. Ensure the 'booknlp' directory "
             "is in the same folder as this script."
         )
         return False, "\n".join(errors)
+
+    # The vendored BookNLP code reads these files during model initialization.
+    # Check them here so a fresh checkout fails with an actionable message.
+    resource_dir = Path(booknlp.english.__file__).parent / "data"
+    required_resources = (
+        "aliases.txt",
+        "entity_cat.tagset",
+        "gutenberg_prop_gender_terms.txt",
+        "supersense.tagset",
+        "wordnet.first.sense",
+    )
+    missing_resources = [name for name in required_resources if not (resource_dir / name).is_file()]
+    if missing_resources:
+        return False, (
+            "BookNLP resource files are missing: " + ", ".join(missing_resources)
+            + f". Expected them in {resource_dir}. Reinstall E2A-SML from a complete checkout."
+        )
 
     # Check key dependencies that commonly fail
     dep_checks = [
