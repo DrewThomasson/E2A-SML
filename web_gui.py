@@ -3,6 +3,7 @@
 
 import os
 import tempfile
+from pathlib import Path
 
 from sml_extractor.core import configure_booknlp_cache
 if 'HF_HOME' not in os.environ:
@@ -16,7 +17,7 @@ from sml_extractor.core import (
     load_booknlp_output,
     run_booknlp,
 )
-from sml_extractor.sml_generator import generate_sml_output, portable_voice_assignments
+from sml_extractor.sml_generator import generate_sml_output, portable_voice_assignments, speaking_characters
 from sml_extractor.voice_library import configured_library_root, ensure_voice_library
 from sml_extractor.voice_matcher import (
     auto_assign_voices,
@@ -27,6 +28,8 @@ from sml_extractor.voice_matcher import (
 
 # Global state for the current session
 _session_state = {}
+APP_CSS = ".gradio-container { max-width: 980px !important; margin-inline: auto !important; }"
+VERSION = (Path(__file__).resolve().parent / "VERSION.txt").read_text().strip()
 
 
 def _get_file_path(file_obj) -> str:
@@ -54,6 +57,15 @@ def _voice_display_label(voice_path: str) -> str:
     return name
 
 
+def preview_voice(voice_path: str | None) -> str | None:
+    """Return the selected library voice for the browser's audio player."""
+    if not voice_path:
+        return None
+    library_root = str(_session_state.get('library_root', configured_library_root()))
+    absolute_path = portable_voice_assignments({'preview': voice_path}, library_root)['preview']
+    return absolute_path if os.path.isfile(absolute_path) else None
+
+
 def process_book(
     input_file:str|None,
     model_size:str,
@@ -74,6 +86,7 @@ def process_book(
     # Create temp working directory
     work_dir = tempfile.mkdtemp(prefix="sml_extractor_")
     _session_state["work_dir"] = work_dir
+    _session_state["generation"] = 0
 
     input_path = _get_file_path(input_file)
 
@@ -110,7 +123,7 @@ def process_book(
     _session_state["booknlp_data"] = booknlp_data
 
     # Extract characters
-    characters = extract_characters(booknlp_data)
+    characters = speaking_characters(booknlp_data, extract_characters(booknlp_data))
     _session_state["characters"] = characters
 
     progress(0.7, desc="Scanning voice library...")
@@ -135,33 +148,31 @@ def process_book(
     char_names = [c.get("normalized_name", "Unknown") for c in characters]
     voice_choices = _build_voice_choices(voice_library)
 
-    # Get preview of book text
-    book_txt = booknlp_data.get("book_txt", "")
-    preview = book_txt[:3000] + ("..." if len(book_txt) > 3000 else "")
-
+    progress(0.9, desc="Generating SML...")
+    gen_status, sml_preview, sml_path = generate_output()
     progress(1.0, desc="Done!")
 
     num_voices = len(voice_assignments)
     status_msg = (
-        f"✅ Processed successfully!\n"
-        f"📚 Book ID: {book_id}\n"
-        f"👥 Characters found: {len(characters)}\n"
-        f"🎤 Voices auto-assigned: {num_voices}"
+        f"Ready to download: {book_id}.e2a.sml.txt\n"
+        f"{len(characters)} speaking characters; {num_voices} voices assigned."
     )
 
     # Update character dropdown choices
     char_dropdown_update = gr.update(choices=char_names, value=char_names[0] if char_names else None)
-    voice_dropdown_update = gr.update(choices=voice_choices, value=None)
+    first_voice = voice_assignments.get(char_names[0], "") if char_names else ""
+    voice_dropdown_update = gr.update(choices=voice_choices, value=first_voice)
 
     return (
         status_msg,                         # status_output
         char_table,                         # char_table
-        preview,                            # book_preview
+        gen_status,                         # gen_status
+        sml_preview,                        # sml_preview
+        sml_path,                           # download
         gr.update(visible=True),            # char_voice_section
-        gr.update(visible=True),            # generate_btn
         char_dropdown_update,               # char_selector
         voice_dropdown_update,              # voice_selector
-        _format_char_detail(characters, voice_assignments, char_names[0] if char_names else None),
+        preview_voice(first_voice),
     )
 
 
@@ -187,63 +198,38 @@ def _build_voice_choices(voice_library):
     return choices
 
 
-def _format_char_detail(characters, voice_assignments, selected_name):
-    """Format detail text for the currently selected character."""
-    if not selected_name:
-        return "No character selected."
-
-    for char in characters:
-        if char.get("normalized_name") == selected_name:
-            gender = char.get("inferred_gender", "unknown")
-            age = char.get("inferred_age_category", "unknown")
-            voice = voice_assignments.get(selected_name, "")
-            voice_label = _voice_display_label(voice) if voice else "(none)"
-            return (
-                f"**{selected_name}**\n"
-                f"  • Inferred gender: {gender}\n"
-                f"  • Inferred age category: {age}\n"
-                f"  • Assigned voice: {voice_label}"
-            )
-    return f"Character '{selected_name}' not found."
-
-
 def on_char_selected(char_name):
     """Called when the user selects a character from the dropdown."""
-    characters = _session_state.get("characters", [])
     voice_assignments = _session_state.get("voice_assignments", {})
-
-    detail = _format_char_detail(characters, voice_assignments, char_name)
-
     # Pre-select the currently assigned voice in the voice dropdown
     current_voice = voice_assignments.get(char_name, "")
-    return detail, gr.update(value=current_voice)
+    return gr.update(value=current_voice), preview_voice(current_voice)
 
 
 def reassign_voice(char_name, voice_path):
-    """Reassign a voice to a character and refresh the table."""
+    """Assign a voice and immediately update the SML download."""
     if not char_name:
-        return "Please select a character first.", gr.update(), ""
+        return gr.update(), gr.update(), gr.update(), gr.update(), None
 
     if "voice_assignments" not in _session_state:
         _session_state["voice_assignments"] = {}
 
     if voice_path and voice_path.strip():
         _session_state["voice_assignments"][char_name] = voice_path.strip()
-        voice_label = _voice_display_label(voice_path)
     else:
         _session_state["voice_assignments"].pop(char_name, None)
-        voice_label = "(none)"
 
-    characters = _session_state.get("characters", [])
-    voice_assignments = _session_state["voice_assignments"]
-
-    char_table = _build_character_table(characters, voice_assignments)
-    detail = _format_char_detail(characters, voice_assignments, char_name)
+    char_table = _build_character_table(
+        _session_state.get("characters", []), _session_state["voice_assignments"]
+    )
+    gen_status, sml_preview, sml_path = generate_output()
 
     return (
         char_table,
-        f"✅ {char_name} → {voice_label}",
-        detail,
+        gen_status,
+        sml_path,
+        sml_preview,
+        preview_voice(voice_path),
     )
 
 
@@ -265,12 +251,14 @@ def generate_output(progress:gr.Progress=gr.Progress())->tuple[str,str,str]:
 
     progress(0.3, desc="Generating SML output...")
 
-    output_dir = os.path.join(work_dir, "sml_output")
+    revision = _session_state.get('generation', 0) + 1
+    _session_state['generation'] = revision
+    output_dir = os.path.join(work_dir, "sml_output", str(revision))
     os.makedirs(output_dir, exist_ok=True)
 
     progress(0.5, desc="Generating E2A-ready SML...")
 
-    # Generate path-based SML with portable voice-library paths
+    # Generate path-based SML with voice paths E2A can resolve.
     e2a_sml_path = os.path.join(output_dir, f"{book_id}.e2a.sml.txt")
     portable_assignments = portable_voice_assignments(voice_assignments, _session_state["library_root"])
     generate_sml_output(booknlp_data, characters, e2a_sml_path, portable_assignments, use_macros=False)
@@ -286,7 +274,7 @@ def generate_output(progress:gr.Progress=gr.Progress())->tuple[str,str,str]:
     progress(1.0, desc="Done!")
 
     return (
-        f"✅ Generated successfully!\n\nUse with ebook2audiobook: {e2a_sml_path}",
+        "SML is ready. Download it above and open it in ebook2audiobook.",
         sml_preview,
         e2a_sml_path,
     )
@@ -301,29 +289,17 @@ def create_app()->gr.Blocks:
 
         gr.Markdown(
             """
-            # 📚 SML Book Dialog Extractor
-
-            Convert books to **SML format** for multi-speaker audiobook generation with
-            [ebook2audiobook](https://github.com/DrewThomasson/ebook2audiobook).
-
-            Book analysis currently supports English books only.
-
-            This tool uses [BookNLP](https://github.com/DrewThomasson/booknlp) to analyze books,
-            identify characters and their dialog, then generates SML-tagged output with voice assignments.
-
-            ### How it works:
-            1. **Upload** a book file (.txt, .epub, .mobi, etc.)
-            2. **Analyze** - BookNLP identifies characters, dialog, and narration
-            3. **Assign voices** - Auto-assign from this tool's voice library
-            4. **Generate** - Download SML output ready for ebook2audiobook
-            """
+            # Book to voice script · v{VERSION}
+            Upload an English book. The SML file for ebook2audiobook is generated automatically.
+            Change voices in **Characters & Voices**; the download updates automatically.
+            """.format(VERSION=VERSION)
         )
 
-        with gr.Tab("📖 Process Book"):
+        with gr.Tab("Book & Download"):
             with gr.Row():
                 with gr.Column(scale=2):
                     input_file = gr.File(
-                        label="📁 Upload Book File",
+                        label="Book file",
                         file_types=[".txt", ".epub", ".mobi", ".pdf", ".html", ".fb2", ".azw", ".azw3"],
                         type="filepath",
                     )
@@ -331,70 +307,41 @@ def create_app()->gr.Blocks:
                     model_size = gr.Radio(
                         ["small", "big"],
                         value="big",
-                        label="🧠 BookNLP Model",
-                        info="'big' is more accurate but slower and requires more RAM/GPU",
+                        label="Analysis model",
+                        info="Big is more accurate; small is faster.",
                     )
 
-            process_btn = gr.Button("🔍 Analyze Book", variant="primary", size="lg")
+            process_btn = gr.Button("Create SML file", variant="primary")
             status_output = gr.Textbox(label="Status", interactive=False)
+            e2a_sml_download = gr.File(label="Download SML for ebook2audiobook", interactive=False)
+            gen_status = gr.Textbox(label="Script status", interactive=False)
+            with gr.Accordion("Preview script", open=False):
+                sml_preview = gr.Textbox(label="SML preview", lines=10, interactive=False)
 
-        with gr.Tab("👥 Characters & Voices"):
-            gr.Markdown(
-                "After analyzing a book, all detected characters are listed below with their "
-                "**inferred gender** and **age category** from BookNLP. Voices are auto-assigned "
-                "from this tool's voice library. Select any character to change its voice."
-            )
-
-            char_table = gr.Dataframe(
-                headers=["Character", "Gender", "Age", "Assigned Voice"],
-                datatype=["str", "str", "str", "str"],
-                label="📋 Detected Characters",
-                interactive=False,
-            )
+        with gr.Tab("Characters & Voices"):
+            gr.Markdown("Choose a character and a voice. The SML download updates automatically.")
 
             with gr.Group(visible=False) as char_voice_section:
-                gr.Markdown("### 🎤 Reassign Voice")
                 with gr.Row():
-                    with gr.Column(scale=1):
-                        char_selector = gr.Dropdown(
-                            label="Select Character",
-                            choices=[],
-                            interactive=True,
-                        )
-                        char_detail = gr.Markdown("Select a character to see details.")
+                    char_selector = gr.Dropdown(
+                        label="Character",
+                        choices=[],
+                        interactive=True,
+                    )
+                    voice_selector = gr.Dropdown(
+                        label="Voice",
+                        choices=[],
+                        interactive=True,
+                    )
+                voice_preview = gr.Audio(label="Listen to voice", interactive=False)
 
-                    with gr.Column(scale=1):
-                        voice_selector = gr.Dropdown(
-                            label="Select Voice",
-                            choices=[],
-                            interactive=True,
-                            info="Pick a voice from the selected library",
-                        )
-                        assign_btn = gr.Button("🎤 Assign Selected Voice", variant="primary")
-                        assign_status = gr.Textbox(label="Status", interactive=False)
-
-        with gr.Tab("📝 Preview & Generate"):
-            book_preview = gr.Textbox(
-                label="📖 Book Text Preview (BookNLP tagged)",
-                lines=15,
-                interactive=False,
-            )
-
-            generate_btn = gr.Button(
-                "🎵 Generate SML Output",
-                variant="primary",
-                size="lg",
-                visible=False,
-            )
-
-            gen_status = gr.Textbox(label="Generation Status", interactive=False)
-            sml_preview = gr.Textbox(
-                label="📄 E2A-ready SML Preview",
-                lines=15,
-                interactive=False,
-            )
-
-            e2a_sml_download = gr.File(label="📥 Download for ebook2audiobook", interactive=False)
+            with gr.Accordion("All speaking characters", open=False):
+                char_table = gr.Dataframe(
+                    headers=["Character", "Gender", "Age", "Assigned Voice"],
+                    datatype=["str", "str", "str", "str"],
+                    label="Voice assignments",
+                    interactive=False,
+                )
 
         # --- Wire up events ---
 
@@ -405,12 +352,13 @@ def create_app()->gr.Blocks:
             outputs=[
                 status_output,
                 char_table,
-                book_preview,
+                gen_status,
+                sml_preview,
+                e2a_sml_download,
                 char_voice_section,
-                generate_btn,
                 char_selector,
                 voice_selector,
-                char_detail,
+                voice_preview,
             ],
         )
 
@@ -418,20 +366,15 @@ def create_app()->gr.Blocks:
         char_selector.change(
             fn=on_char_selected,
             inputs=[char_selector],
-            outputs=[char_detail, voice_selector],
+            outputs=[voice_selector, voice_preview],
         )
 
-        # Assign voice from dropdown → update table and detail
-        assign_btn.click(
+        # Only user changes trigger regeneration; selecting another character
+        # updates the dropdown without changing its assigned voice.
+        voice_selector.input(
             fn=reassign_voice,
             inputs=[char_selector, voice_selector],
-            outputs=[char_table, assign_status, char_detail],
-        )
-
-        # Generate SML output
-        generate_btn.click(
-            fn=generate_output,
-            outputs=[gen_status, sml_preview, e2a_sml_download],
+            outputs=[char_table, gen_status, e2a_sml_download, sml_preview, voice_preview],
         )
 
     return app
@@ -439,4 +382,4 @@ def create_app()->gr.Blocks:
 
 if __name__ == "__main__":
     app = create_app()
-    app.launch(server_name="127.0.0.1", server_port=7861, theme=gr.themes.Soft())
+    app.launch(server_name="127.0.0.1", server_port=7861, theme=gr.themes.Soft(), css=APP_CSS)

@@ -7,17 +7,39 @@ from pathlib import Path
 
 
 def portable_voice_assignments(voice_assignments:dict[str,str], library_root:str)->dict[str,str]:
-    """Express library voices as paths relative to a voices/ folder."""
-    voices_root = Path(library_root).expanduser().resolve() / 'voices'
+    """Use existing voice paths that E2A can open from another working directory."""
+    library_root = Path(library_root).expanduser().resolve()
     portable:dict[str,str] = {}
     for character, voice_path in voice_assignments.items():
-        try:
-            relative = Path(voice_path).expanduser().resolve().relative_to(voices_root)
-        except ValueError:
-            portable[character] = voice_path
-        else:
-            portable[character] = str(Path('voices') / relative)
+        path = Path(voice_path).expanduser()
+        if not path.is_absolute() and path.parts and path.parts[0] == 'voices':
+            path = library_root / path
+        portable[character] = str(path.resolve())
     return portable
+
+
+def speaking_characters(booknlp_data: dict, characters: list) -> list:
+    """Return narrator and characters attributed at least one quote."""
+    name_map = _build_coref_name_map(booknlp_data.get('book_data'))
+    names = {'Narrator'}
+    for quote in booknlp_data.get('quotes', []):
+        names.add(name_map.get(str(quote.get('char_id')), 'Narrator'))
+
+    selected = []
+    seen = set()
+    for character in characters:
+        name = character.get('normalized_name')
+        if name in names and name not in seen:
+            selected.append(character)
+            seen.add(name)
+    for name in sorted(names - seen):
+        selected.append({
+            'normalized_name': name,
+            'inferred_gender': 'unknown',
+            'inferred_age_category': 'adult',
+            'voice': None,
+        })
+    return selected
 
 
 def generate_sml_output(
@@ -166,14 +188,12 @@ def _generate_from_tokens(
         voice_path = char_voice_map.get(speaker)
         voice_tag_val = speaker if use_macros else voice_path
 
-        if voice_tag_val and voice_tag_val != active_voice_tag:
+        if voice_tag_val != active_voice_tag:
             if active_voice_tag is not None:
                 sml_lines.append("[/voice]")
-            sml_lines.append(f"[voice:{voice_tag_val}]")
+            if voice_tag_val:
+                sml_lines.append(f"[voice:{voice_tag_val}]")
             active_voice_tag = voice_tag_val
-        elif not voice_tag_val and active_voice_tag is not None:
-            # No voice for this speaker but we have an open tag — keep it
-            pass
 
         sml_lines.append(text)
 
@@ -204,10 +224,11 @@ def _generate_from_book_txt(book_txt_content: str, char_voice_map: dict, use_mac
 
             voice_path = char_voice_map.get(char_name)
             voice_tag_val = char_name if use_macros else voice_path
-            if voice_tag_val and voice_tag_val != current_voice:
+            if voice_tag_val != current_voice:
                 if current_voice is not None:
                     sml_lines.append("[/voice]")
-                sml_lines.append(f"[voice:{voice_tag_val}]")
+                if voice_tag_val:
+                    sml_lines.append(f"[voice:{voice_tag_val}]")
                 current_voice = voice_tag_val
 
             sml_lines.append(text)

@@ -2,7 +2,7 @@
 
 E2A-SML uses BookNLP to find dialogue and speakers in an **English** book, lets you assign voices, and creates an SML text file for [ebook2audiobook](https://github.com/DrewThomasson/ebook2audiobook). It runs separately from E2A.
 
-![E2A-SML web GUI showing book upload and analysis options](assets/web_gui.png)
+![E2A-SML v26.10.1 GUI showing the character selector, voice selector, and audio preview](assets/web_gui.png)
 
 ## Quick start with Docker
 
@@ -33,10 +33,9 @@ On Windows PowerShell, activate with `.venv\Scripts\Activate.ps1` and install th
 
 ## Make an audiobook with E2A
 
-1. In **Process Book**, upload an English book and select **Analyze Book**.
-2. In **Characters & Voices**, review or change the assigned voices.
-3. In **Preview & Generate**, select **Generate SML Output** and download the **E2A-ready SML** file named `<book>.e2a.sml.txt`.
-4. Give that file to E2A as the book input. Its `voices/...` paths must refer to files E2A can access. If the tools use separate voice folders, copy or mount the matching voices into E2A's `voices/` folder. Run native E2A from its repository root.
+1. In **Book & Download**, upload an English book and select **Create SML file**. Download the generated `<book>.e2a.sml.txt` file.
+2. In **Characters & Voices**, select a character and choose a voice. The preview plays the selected voice, and the SML download updates automatically when you change the voice.
+3. Give that file to E2A as the book input. Voice tags contain absolute paths to this tool's voice files, so both tools must have access to that folder. If they run in separate containers or computers, mount or copy the voice files to matching paths.
 
 E2A-SML produces one SML file for E2A. Its voice tags use paths to the assigned voice files.
 

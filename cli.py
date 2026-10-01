@@ -14,7 +14,7 @@ from sml_extractor.core import (
     load_booknlp_output,
     run_booknlp,
 )
-from sml_extractor.sml_generator import generate_sml_output, portable_voice_assignments
+from sml_extractor.sml_generator import generate_sml_output, portable_voice_assignments, speaking_characters
 from sml_extractor.voice_library import configured_library_root, ensure_voice_library
 from sml_extractor.voice_matcher import (
     auto_assign_voices,
@@ -25,6 +25,7 @@ from sml_extractor.voice_matcher import (
 
 
 def main()->None:
+    version = (Path(__file__).resolve().parent / "VERSION.txt").read_text().strip()
     parser = argparse.ArgumentParser(
         description="SML Book Dialog Extractor - Convert books to SML format for ebook2audiobook",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -86,6 +87,7 @@ Examples:
         action="store_true",
         help="Launch web GUI instead of CLI mode",
     )
+    parser.add_argument("--version", action="version", version=f"E2A-SML {version}")
     parser.add_argument(
         "--host",
         default="127.0.0.1",
@@ -185,7 +187,7 @@ def _run_headless(args:argparse.Namespace)->None:
     progress("BookNLP data loaded.", 65)
 
     # Step 3: Extract characters
-    characters = extract_characters(booknlp_data)
+    characters = speaking_characters(booknlp_data, extract_characters(booknlp_data))
     progress(f"Found {len(characters)} characters.", 70)
 
     # Print character summary
@@ -241,13 +243,14 @@ def _launch_gui(args:argparse.Namespace)->None:
     """Launch the web GUI."""
     try:
         import gradio as gr
-        from web_gui import create_app
+        from web_gui import APP_CSS, create_app
 
         app = create_app()
         app.launch(
             server_name=args.host,
             server_port=args.port,
             share=args.share,
+            css=APP_CSS,
         )
     except ImportError as e:
         print(f"Error: Could not launch GUI. Make sure gradio is installed: {e}")

@@ -101,10 +101,20 @@ def auto_assign_voices(
     assignments = {}
     used_voices = set()
 
+    # Reserve a distinct narrator voice before the character pool is exhausted.
+    narrator = next((c for c in characters if c.get('normalized_name') == 'Narrator'), None)
+    if narrator is not None:
+        voice = _find_best_voice('female', 'adult', voice_library, used_voices, custom_voices)
+        if voice:
+            assignments['Narrator'] = voice
+            used_voices.add(voice)
+
     # Split into known-gender vs unknown-gender characters, preserving order
     known_gender_chars = []
     unknown_gender_chars = []
     for char in characters:
+        if char.get('normalized_name') == 'Narrator':
+            continue
         gender = char.get("inferred_gender", "unknown")
         if gender in GENDERS:
             known_gender_chars.append(char)
