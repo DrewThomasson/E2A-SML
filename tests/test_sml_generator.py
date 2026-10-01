@@ -50,9 +50,9 @@ class VoiceTransitionTests(unittest.TestCase):
             use_macros=False,
         )
         self.assertEqual(output, (
-            '[voice:jeremiah.wav]\n“Hello”\n[/voice]\n'
-            '[voice:narrator.wav]\nhe said.\n[/voice]\n'
-            '[voice:jeremiah.wav]\n“Again”\n[/voice]'
+            '[voice:jeremiah.wav]“Hello”[/voice]\n'
+            '[voice:narrator.wav]he said.[/voice]\n'
+            '[voice:jeremiah.wav]“Again”[/voice]'
         ))
 
     def test_unassigned_narrator_does_not_inherit_previous_voice(self):
@@ -62,9 +62,20 @@ class VoiceTransitionTests(unittest.TestCase):
             use_macros=False,
         )
         self.assertEqual(output, (
-            '[voice:jeremiah.wav]\nHello\n[/voice]\n'
-            'he said\n[voice:jeremiah.wav]\nAgain\n[/voice]'
+            '[voice:jeremiah.wav]Hello[/voice]\n'
+            'he said\n[voice:jeremiah.wav]Again[/voice]'
         ))
+
+    def test_all_caps_line_keeps_voice_tags_together_for_calibre(self):
+        output = _generate_from_book_txt(
+            '[Narrator] before [/]\n[Narrator] PRINCESS MATTERS [/]\n'
+            '[Narrator] after [/]',
+            {'Narrator': 'narrator.wav'},
+            use_macros=False,
+        )
+        for line in output.splitlines():
+            self.assertEqual(line.count('[voice:'), line.count('[/voice]'))
+        self.assertIn('[voice:narrator.wav]PRINCESS MATTERS[/voice]', output)
 
 
 if __name__ == '__main__':

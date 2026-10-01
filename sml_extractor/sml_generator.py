@@ -171,9 +171,10 @@ def _generate_from_tokens(
     if current_words:
         segments.append((current_speaker, _join_tokens(current_words)))
 
-    # Build SML output with voice tags
+    # Keep every voice block on one text line. Calibre can split a TXT book at
+    # headings; an opening tag on a previous line would be stranded in another
+    # XHTML document before E2A validates each document separately.
     sml_lines = []
-    active_voice_tag = None
 
     for speaker, text in segments:
         if speaker is None:
@@ -187,18 +188,7 @@ def _generate_from_tokens(
 
         voice_path = char_voice_map.get(speaker)
         voice_tag_val = speaker if use_macros else voice_path
-
-        if voice_tag_val != active_voice_tag:
-            if active_voice_tag is not None:
-                sml_lines.append("[/voice]")
-            if voice_tag_val:
-                sml_lines.append(f"[voice:{voice_tag_val}]")
-            active_voice_tag = voice_tag_val
-
-        sml_lines.append(text)
-
-    if active_voice_tag is not None:
-        sml_lines.append("[/voice]")
+        sml_lines.append(f"[voice:{voice_tag_val}]{text}[/voice]" if voice_tag_val else text)
 
     return "\n".join(sml_lines)
 
@@ -207,7 +197,6 @@ def _generate_from_book_txt(book_txt_content: str, char_voice_map: dict, use_mac
     """Fallback: generate SML from sentence-level .book.txt."""
     lines = book_txt_content.strip().split("\n")
     sml_lines = []
-    current_voice = None
 
     for line in lines:
         line = line.strip()
@@ -224,19 +213,9 @@ def _generate_from_book_txt(book_txt_content: str, char_voice_map: dict, use_mac
 
             voice_path = char_voice_map.get(char_name)
             voice_tag_val = char_name if use_macros else voice_path
-            if voice_tag_val != current_voice:
-                if current_voice is not None:
-                    sml_lines.append("[/voice]")
-                if voice_tag_val:
-                    sml_lines.append(f"[voice:{voice_tag_val}]")
-                current_voice = voice_tag_val
-
-            sml_lines.append(text)
+            sml_lines.append(f"[voice:{voice_tag_val}]{text}[/voice]" if voice_tag_val else text)
         else:
             sml_lines.append(line)
-
-    if current_voice is not None:
-        sml_lines.append("[/voice]")
 
     return "\n".join(sml_lines)
 
