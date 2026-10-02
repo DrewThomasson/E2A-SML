@@ -3,7 +3,6 @@
 
 import os
 import tempfile
-from pathlib import Path
 
 from sml_extractor.core import configure_booknlp_cache
 if 'HF_HOME' not in os.environ:
@@ -29,7 +28,6 @@ from sml_extractor.voice_matcher import (
 # Global state for the current session
 _session_state = {}
 APP_CSS = ".gradio-container { max-width: 980px !important; margin-inline: auto !important; }"
-VERSION = (Path(__file__).resolve().parent / "VERSION.txt").read_text().strip()
 
 
 def _get_file_path(file_obj) -> str:
@@ -284,15 +282,15 @@ def create_app()->gr.Blocks:
     """Create the Gradio web interface."""
 
     with gr.Blocks(
-        title="SML Book Dialog Extractor",
+        title="E2A SML",
     ) as app:
 
         gr.Markdown(
             """
-            # Book to voice script · v{VERSION}
-            Upload an English book. The SML file for ebook2audiobook is generated automatically.
-            Change voices in **Characters & Voices**; the download updates automatically.
-            """.format(VERSION=VERSION)
+            # E2A SML
+            Turn an English book into an SML script for [ebook2audiobook](https://github.com/DrewThomasson/ebook2audiobook).
+            Preview or change character voices, and the download updates automatically.
+            """
         )
 
         with gr.Tab("Book & Download"):
