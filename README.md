@@ -2,7 +2,7 @@
 
 E2A-SML uses BookNLP to find dialogue and speakers in an **English** book, lets you assign voices, and creates an SML text file for [ebook2audiobook](https://github.com/DrewThomasson/ebook2audiobook). It runs separately from E2A.
 
-![E2A-SML v26.10.1.1 GUI showing the character selector, voice selector, and audio preview](assets/web_gui.png)
+![E2A SML v26.10.1.2 GUI showing the character selector, voice selector, and audio preview](assets/web_gui.png)
 
 ## Quick start with Docker
 
