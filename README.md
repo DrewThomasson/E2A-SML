@@ -35,7 +35,7 @@ On Windows PowerShell, activate with `.venv\Scripts\Activate.ps1` and install th
 
 1. In **Book & Download**, upload an English book and select **Create SML file**. Download the generated `<book>.e2a.sml.txt` file.
 2. In **Characters & Voices**, select a character and choose a voice. The preview plays the selected voice, and the SML download updates automatically when you change the voice.
-3. Give that file to E2A as the book input. Voice tags contain absolute paths to this tool's voice files, so both tools must have access to that folder. If they run in separate containers or computers, mount or copy the voice files to matching paths.
+3. Give that file to E2A as the book input. Library voice tags use paths such as `voices/eng/adult/female/Voice.wav`, relative to E2A's working directory. Run E2A from its project directory and ensure the selected voices exist in its `voices/` folder. Custom voices outside E2A-SML's library retain absolute paths and must be accessible to E2A at those paths.
 
 E2A-SML produces one SML file for E2A. Its voice tags use paths to the assigned voice files.
 Each voice tag is closed on the same text line so Calibre can split chapters without breaking E2A's SML parser.

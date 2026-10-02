@@ -24,12 +24,21 @@ class VoiceTransitionTests(unittest.TestCase):
         names = [c['normalized_name'] for c in speaking_characters(data, characters)]
         self.assertEqual(names, ['Narrator', 'Jeremiah', 'Character3'])
 
-    def test_voice_paths_are_absolute_for_e2a(self):
+    def test_library_voice_paths_are_relative_for_e2a(self):
         paths = portable_voice_assignments(
             {'Jeremiah': 'voices/eng/adult/male/voice.wav'}, '/tmp/e2a-sml/data'
         )
-        expected = Path('/tmp/e2a-sml/data/voices/eng/adult/male/voice.wav').resolve()
-        self.assertEqual(paths['Jeremiah'], str(expected))
+        self.assertEqual(paths['Jeremiah'], 'voices/eng/adult/male/voice.wav')
+
+        absolute = Path('/tmp/e2a-sml/data/voices/eng/adult/male/voice.wav')
+        paths = portable_voice_assignments({'Jeremiah': str(absolute)}, '/tmp/e2a-sml/data')
+        self.assertEqual(paths['Jeremiah'], 'voices/eng/adult/male/voice.wav')
+
+    def test_custom_voice_paths_remain_absolute(self):
+        paths = portable_voice_assignments(
+            {'Jeremiah': '/tmp/custom/voice.wav'}, '/tmp/e2a-sml/data'
+        )
+        self.assertEqual(paths['Jeremiah'], str(Path('/tmp/custom/voice.wav').resolve()))
 
     def test_dialogue_narration_dialogue_uses_correct_voices(self):
         words = ['“', 'Hello', '”', 'he', 'said', '.', '“', 'Again', '”']

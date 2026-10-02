@@ -55,6 +55,10 @@ class GuiFlowTests(unittest.TestCase):
             self.assertTrue(initial_file.is_file())
             self.assertIn('Hello', initial_file.read_text())
             self.assertEqual(result[8], web_gui.preview_voice(result[7]['value']))
+            self.assertEqual(
+                web_gui.preview_voice('voices/eng/adult/female/one.wav'),
+                str(voices[0].resolve()),
+            )
 
             new_voice = str(voices[0])
             if web_gui._session_state['voice_assignments']['Jeremiah'] == new_voice:
@@ -63,7 +67,7 @@ class GuiFlowTests(unittest.TestCase):
             self.assertEqual(len(changed), 5)
             regenerated = changed[2]
             self.assertNotEqual(initial_file, Path(regenerated))
-            self.assertIn(f'[voice:{Path(new_voice).resolve()}]', Path(regenerated).read_text())
+            self.assertIn(f'[voice:voices/eng/adult/female/{Path(new_voice).name}]', Path(regenerated).read_text())
 
 
 if __name__ == '__main__':

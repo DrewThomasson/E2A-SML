@@ -16,7 +16,7 @@ from sml_extractor.core import (
     load_booknlp_output,
     run_booknlp,
 )
-from sml_extractor.sml_generator import generate_sml_output, portable_voice_assignments, speaking_characters
+from sml_extractor.sml_generator import generate_sml_output, portable_voice_assignments, resolve_voice_path, speaking_characters
 from sml_extractor.voice_library import configured_library_root, ensure_voice_library
 from sml_extractor.voice_matcher import (
     auto_assign_voices,
@@ -60,8 +60,8 @@ def preview_voice(voice_path: str | None) -> str | None:
     if not voice_path:
         return None
     library_root = str(_session_state.get('library_root', configured_library_root()))
-    absolute_path = portable_voice_assignments({'preview': voice_path}, library_root)['preview']
-    return absolute_path if os.path.isfile(absolute_path) else None
+    absolute_path = resolve_voice_path(voice_path, library_root)
+    return str(absolute_path) if absolute_path.is_file() else None
 
 
 def process_book(

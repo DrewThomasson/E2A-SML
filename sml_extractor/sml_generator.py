@@ -6,15 +6,25 @@ import re
 from pathlib import Path
 
 
-def portable_voice_assignments(voice_assignments:dict[str,str], library_root:str)->dict[str,str]:
-    """Use existing voice paths that E2A can open from another working directory."""
+def resolve_voice_path(voice_path:str, library_root:str)->Path:
+    """Find a voice in this tool's library for local playback."""
     library_root = Path(library_root).expanduser().resolve()
+    path = Path(voice_path).expanduser()
+    if not path.is_absolute() and path.parts and path.parts[0] == 'voices':
+        path = library_root / path
+    return path.resolve()
+
+
+def portable_voice_assignments(voice_assignments:dict[str,str], library_root:str)->dict[str,str]:
+    """Use E2A-relative paths for library voices and absolute paths for custom voices."""
+    voices_root = Path(library_root).expanduser().resolve() / 'voices'
     portable:dict[str,str] = {}
     for character, voice_path in voice_assignments.items():
-        path = Path(voice_path).expanduser()
-        if not path.is_absolute() and path.parts and path.parts[0] == 'voices':
-            path = library_root / path
-        portable[character] = str(path.resolve())
+        path = resolve_voice_path(voice_path, library_root)
+        try:
+            portable[character] = str(Path('voices') / path.relative_to(voices_root))
+        except ValueError:
+            portable[character] = str(path)
     return portable
 
 
